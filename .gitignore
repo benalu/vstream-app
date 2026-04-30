@@ -1,0 +1,61 @@
+# Root .gitignore for cstream-app
+
+# Node.js / frontend
+node_modules/
+dist/
+.build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# Vite / Vue
+/public/
+/.cache/
+.idea/
+*.local
+
+# Tailwind / build artifacts
+*.css.map
+
+# Go / backend
+/vstream-backend/bin/
+/vstream-backend/pkg/mod/
+/vstream-backend/*.exe
+/vstream-backend/*.exe~
+/vstream-backend/*.test
+/vstream-backend/*.out
+/vstream-backend/*.log
+/vstream-backend/*.tmp
+/vstream-backend/vendor/
+/vstream-backend/.air/
+/vstream-backend/*.env
+/vstream-backend/data/
+
+# Editor / system files
+*.swp
+*~
+*.tmp
+*.log
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Optional: ignore tmux / session files
+*.session
