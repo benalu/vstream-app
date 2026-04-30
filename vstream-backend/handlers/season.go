@@ -163,3 +163,38 @@ func DeleteEpisode(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Episode berhasil dihapus"})
 }
+
+func AddEpisode(c *gin.Context) {
+	seasonID, err := strconv.Atoi(c.Param("seasonId"))
+	if err != nil {
+		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "ID tidak valid", err))
+		return
+	}
+
+	var input struct {
+		EpNum int    `json:"ep_num" binding:"required"`
+		Title string `json:"title"`
+		URL1  string `json:"url1" binding:"required"`
+		URL2  string `json:"url2"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "URL Server 1 dan nomor episode wajib diisi", err))
+		return
+	}
+
+	ep := models.Episode{
+		SeasonID: uint(seasonID),
+		EpNum:    input.EpNum,
+		Title:    input.Title,
+		URL1:     input.URL1,
+		URL2:     input.URL2,
+	}
+
+	if err := database.DB.Create(&ep).Error; err != nil {
+		verr.Handle(c, verr.NewAdminError(http.StatusInternalServerError, "Gagal menyimpan episode", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": ep})
+}

@@ -48,6 +48,10 @@ const filteredContent = computed(() => {
 })
 
 const tabCount = (typeId) => allContent.value.filter(m => m.type === typeId).length
+const hasExpandable = computed(() =>
+  activeTab.value === 'series' ||
+  (activeTab.value === 'anime' && filteredContent.value.some(i => i.has_episodes))
+)
 
 // ── API ───────────────────────────────────────────────────────
 const fetchMovies = async () => {
@@ -72,7 +76,7 @@ const searchTMDB = async () => {
   isSearchingTMDB.value = true
   previewData.value = null
   try {
-    const res = await api.get(`/admin/tmdb/${form.value.tmdb_id}`)
+    const res = await api.get(`/admin/tmdb/${form.value.tmdb_id}?type=${form.value.type}`)
     previewData.value = res.data.data
   } catch {
     alert('Film tidak ditemukan di TMDB. Cek kembali ID-nya.')
@@ -275,7 +279,7 @@ onMounted(fetchMovies)
         <table class="mv-table">
           <thead>
             <tr>
-              <th class="mv-th mv-th--expand" v-if="activeTab !== 'movie'"></th>
+              <th class="mv-th mv-th--expand" v-if="hasExpandable"></th>
               <th class="mv-th mv-th--main">Judul</th>
               <th class="mv-th mv-th--type">Kategori</th>
               <th class="mv-th mv-th--hide-sm">Genre</th>
@@ -292,7 +296,8 @@ onMounted(fetchMovies)
                 :class="{ 'mv-tr--expanded': expandedRows.has(item.id) }"
               >
                 <!-- Expand toggle (series/anime only) -->
-                <td v-if="activeTab !== 'movie'" class="mv-td mv-td--expand" @click="toggleExpand(item)">
+                <td v-if="activeTab === 'series' || (activeTab === 'anime' && item.has_episodes)"
+                  class="mv-td mv-td--expand" @click="toggleExpand(item)">
                   <button class="mv-expand-btn">
                     <ChevronDown v-if="expandedRows.has(item.id)" :size="14" />
                     <ChevronRight v-else :size="14" />
@@ -351,7 +356,7 @@ onMounted(fetchMovies)
                   <div class="mv-actions">
                     <!-- Add Season (series/anime only) -->
                     <button
-                      v-if="activeTab !== 'movie'"
+                      v-if="activeTab === 'series' || (activeTab === 'anime' && item.has_episodes)"
                       class="mv-action-btn mv-action-btn--season"
                       title="Tambah Season"
                       @click="toggleExpand(item); openAddSeasonModal(item.id)"
@@ -369,10 +374,13 @@ onMounted(fetchMovies)
               </tr>
 
               <!-- Expanded seasons row (series/anime) -->
-              <tr v-if="activeTab !== 'movie' && expandedRows.has(item.id)" class="mv-tr-expanded">
-                <td :colspan="7" class="mv-td-expanded">
+              <tr v-if="(activeTab === 'series' || (activeTab === 'anime' && item.has_episodes)) && expandedRows.has(item.id)" class="mv-tr-expanded">
+                <td :colspan="hasExpandable ? 7 : 6" class="mv-td-expanded">
                   <div class="mv-seasons-wrap">
-
+                    <div v-if="seasonsLoading[item.id]" class="mv-seasons-empty">
+                      <Loader2 :size="20" class="mv-spin" />
+                      <p>Memuat season...</p>
+                    </div>
                     <div v-if="!seasons[item.id] || seasons[item.id].length === 0" class="mv-seasons-empty">
                       <Tv :size="20" />
                       <p>Belum ada season.</p>
@@ -545,14 +553,28 @@ onMounted(fetchMovies)
 
               <!-- URLs -->
               <div class="mv-field">
-                <label class="mv-label">Video URL — Server 1 <span v-if="form.type !== 'series' && !form.has_episodes" class="mv-label-required">*</span></label>
-                <input 
-                  v-model="form.url1" 
-                  placeholder="https://..." 
-                  :required="form.type !== 'series' && !form.has_episodes"
-                  class="vs-input" 
+                <label class="mv-label">
+                  Video URL — Server 1
+                  <span v-if="form.type === 'movie' || (form.type === 'anime' && !form.has_episodes)" class="mv-label-required">*</span>
+                </label>
+                <input
+                  v-model="form.url1"
+                  placeholder="https://..."
+                  :required="form.type === 'movie' || (form.type === 'anime' && !form.has_episodes)"
+                  class="vs-input"
                 />
-                <p v-if="form.type === 'series' || form.has_episodes" class="mv-field-hint">URL diisi di level episode/season, bukan di sini</p>
+              </div>
+
+              <!-- url2 dan url3 selalu opsional, tampilkan sebagai field-row -->
+              <div class="mv-field-row">
+                <div class="mv-field">
+                  <label class="mv-label">Server 2</label>
+                  <input v-model="form.url2" placeholder="https://..." class="vs-input" />
+                </div>
+                <div class="mv-field">
+                  <label class="mv-label">Server 3</label>
+                  <input v-model="form.url3" placeholder="https://..." class="vs-input" />
+                </div>
               </div>
 
               <div class="mv-field-row">

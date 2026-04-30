@@ -87,6 +87,7 @@ func main() {
 			admin.DELETE("/seasons/:seasonId", handlers.DeleteSeason)
 			admin.PUT("/episodes/:epId", handlers.UpdateEpisode)
 			admin.DELETE("/episodes/:epId", handlers.DeleteEpisode)
+			admin.POST("/seasons/:seasonId/episodes", handlers.AddEpisode)
 		}
 
 		// ── Public (tanpa auth) ──────────────────────────────────

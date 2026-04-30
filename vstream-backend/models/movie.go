@@ -20,7 +20,7 @@ type Movie struct {
 	Backdrop    string `json:"backdrop"`
 	LogoPath    string `json:"logo_path"`
 	Overview    string `json:"overview"`
-	URL1        string `json:"url1" gorm:"not null"`
+	URL1        string `json:"url1"`
 	URL2        string `json:"url2"`
 	URL3        string `json:"url3"`
 }

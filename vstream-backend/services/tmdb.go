@@ -9,9 +9,15 @@ import (
 
 // Struct internal untuk mapping JSON TMDB
 type TMDBResponse struct {
-	Title        string  `json:"title"`
-	ReleaseDate  string  `json:"release_date"`
-	Runtime      int     `json:"runtime"`
+	// Movie fields
+	Title       string `json:"title"`
+	ReleaseDate string `json:"release_date"`
+	Runtime     int    `json:"runtime"`
+	// TV fields
+	Name            string `json:"name"`
+	FirstAirDate    string `json:"first_air_date"`
+	EpisodeRunTimes []int  `json:"episode_run_times"`
+	// Shared
 	VoteAverage  float64 `json:"vote_average"`
 	Overview     string  `json:"overview"`
 	PosterPath   string  `json:"poster_path"`
@@ -26,9 +32,37 @@ type TMDBResponse struct {
 	} `json:"images"`
 }
 
-func FetchMetadata(tmdbID string) (*TMDBResponse, error) {
+func (r *TMDBResponse) NormalizedTitle() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Title
+}
+func (r *TMDBResponse) NormalizedReleaseDate() string {
+	if r.FirstAirDate != "" {
+		return r.FirstAirDate
+	}
+	return r.ReleaseDate
+}
+func (r *TMDBResponse) NormalizedRuntime() int {
+	if len(r.EpisodeRunTimes) > 0 {
+		return r.EpisodeRunTimes[0]
+	}
+	return r.Runtime
+}
+
+func FetchMetadata(tmdbID string, contentType string) (*TMDBResponse, error) {
 	apiKey := os.Getenv("TMDB_API_KEY")
-	url := fmt.Sprintf("https://api.themoviedb.org/3/movie/%s?api_key=%s&language=id-ID&append_to_response=images", tmdbID, apiKey)
+
+	tmdbType := "movie"
+	if contentType == "series" || contentType == "anime" {
+		tmdbType = "tv"
+	}
+
+	url := fmt.Sprintf(
+		"https://api.themoviedb.org/3/%s/%s?api_key=%s&language=id-ID&append_to_response=images",
+		tmdbType, tmdbID, apiKey,
+	)
 
 	resp, err := http.Get(url)
 	if err != nil {

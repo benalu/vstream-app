@@ -22,7 +22,7 @@ var validTypes = map[string]bool{
 
 // buildMovieFromTMDB mengambil metadata TMDB dan mapping ke model Movie
 func buildMovieFromTMDB(tmdbID string, contentType string, hasEpisodes bool, url1, url2, url3 string) (*models.Movie, error) {
-	meta, err := services.FetchMetadata(tmdbID)
+	meta, err := services.FetchMetadata(tmdbID, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +41,9 @@ func buildMovieFromTMDB(tmdbID string, contentType string, hasEpisodes bool, url
 		TmdbID:      tmdbID,
 		Type:        contentType,
 		HasEpisodes: hasEpisodes,
-		Title:       meta.Title,
-		Year:        strings.Split(meta.ReleaseDate, "-")[0],
-		Duration:    fmt.Sprintf("%d min", meta.Runtime),
+		Title:       meta.NormalizedTitle(),
+		Year:        strings.Split(meta.NormalizedReleaseDate(), "-")[0],
+		Duration:    fmt.Sprintf("%d min", meta.NormalizedRuntime()),
 		Rating:      fmt.Sprintf("%.1f", meta.VoteAverage),
 		Genre:       strings.Join(genres, ", "),
 		Poster:      "https://image.tmdb.org/t/p/original" + meta.PosterPath,
@@ -270,11 +270,12 @@ func GetAnimePublic(c *gin.Context) {
 
 func PreviewTMDB(c *gin.Context) {
 	id := c.Param("id")
+	contentType := c.DefaultQuery("type", "movie")
 	if id == "" {
 		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "ID TMDB tidak boleh kosong", nil))
 		return
 	}
-	meta, err := services.FetchMetadata(id)
+	meta, err := services.FetchMetadata(id, contentType)
 	if err != nil {
 		verr.Handle(c, verr.NewAdminError(http.StatusNotFound, "Tidak ditemukan di TMDB", err))
 		return
