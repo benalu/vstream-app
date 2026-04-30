@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import TheNavbar      from '@/components/public/TheNavbar.vue'
 import HeroSection    from '@/components/public/HeroSection.vue'
 import CategoryFilter from '@/components/public/CategoryFilter.vue'
@@ -40,9 +41,15 @@ const sectionTitle = computed(() => ({
 }[activeCategory.value]))
 
 // ── Handlers ──────────────────────────────────────────────────
-const handlePlay      = (item) => console.log('play:', item)       // TODO: navigate /watch
-const handleMore      = (item) => console.log('more:', item)       // TODO: navigate /detail
-const handleCardClick = (item) => console.log('card:', item)
+const router = useRouter()
+
+const goWatch = (item) => {
+  router.push({ name: 'Watch', params: { type: item.type, tmdbId: item.tmdb_id } })
+}
+
+const handlePlay      = (item) => goWatch(item)
+const handleMore      = (item) => goWatch(item)
+const handleCardClick = (item) => goWatch(item)
 const handleMoreClick = ()     => console.log('lihat semua')
 </script>
 

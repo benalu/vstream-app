@@ -4,6 +4,7 @@ import api from '@/lib/api'
 
 // Lazy load semua view
 const Home        = () => import('@/views/public/Home.vue')
+const Watch       = () => import('@/views/public/Watch.vue')
 const Login       = () => import('@/views/admin/Login.vue')
 const AdminLayout = () => import('@/layouts/AdminLayout.vue')
 const Dashboard   = () => import('@/views/admin/Dashboard.vue')
@@ -19,6 +20,11 @@ const routes = [
     path: '/',
     name: 'Home',
     component: Home,
+  },
+  {
+    path: '/watch/:type/:tmdbId',
+    name: 'Watch',
+    component: Watch,
   },
 
   // ── Login ────────────────────────────────────────────────

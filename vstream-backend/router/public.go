@@ -29,4 +29,7 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 	api.GET("/movies/:id", handlers.GetMoviePublic)
 	api.GET("/series/:id", handlers.GetSeriesPublic)
 	api.GET("/anime/:id", handlers.GetAnimePublic)
+
+	// ── Watch data (includes stream URLs) ─────────────────────
+	api.GET("/watch/:type/:tmdb_id", handlers.GetWatchData)
 }
