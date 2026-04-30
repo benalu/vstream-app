@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"vstream-backend/database"
 	"vstream-backend/models"
@@ -15,6 +16,7 @@ import (
 func AddMovie(c *gin.Context) {
 	var input struct {
 		TmdbID string `json:"tmdb_id"`
+		Type   int    `json:"type"` // 1=movie, 2=series, 3=anime
 		URL1   string `json:"url1"`
 		URL2   string `json:"url2"`
 		URL3   string `json:"url3"`
@@ -22,6 +24,13 @@ func AddMovie(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "Invalid JSON input", err))
+		return
+	}
+
+	// Validasi type
+	contentType := models.ContentType(input.Type)
+	if !contentType.IsValid() {
+		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "Type tidak valid (1=Movie, 2=Series, 3=Anime)", nil))
 		return
 	}
 
@@ -45,6 +54,7 @@ func AddMovie(c *gin.Context) {
 
 	movie := models.Movie{
 		TmdbID:   input.TmdbID,
+		Type:     contentType,
 		Title:    meta.Title,
 		Year:     strings.Split(meta.ReleaseDate, "-")[0],
 		Duration: fmt.Sprintf("%d min", meta.Runtime),
@@ -68,9 +78,28 @@ func AddMovie(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "data": movie})
 }
 
+// GetAllMovies mendukung filter via query param ?type=1
+// Contoh: GET /admin/movies        → semua konten
+//
+//	GET /admin/movies?type=1 → hanya movie
+//	GET /admin/movies?type=2 → hanya series
+//	GET /admin/movies?type=3 → hanya anime
 func GetAllMovies(c *gin.Context) {
 	var movies []models.Movie
-	database.DB.Order("created_at desc").Find(&movies)
+
+	query := database.DB.Order("created_at desc")
+
+	// Filter by type jika ada query param
+	if typeParam := c.Query("type"); typeParam != "" {
+		typeInt, err := strconv.Atoi(typeParam)
+		if err != nil || !models.ContentType(typeInt).IsValid() {
+			verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "Query param type tidak valid", nil))
+			return
+		}
+		query = query.Where("type = ?", typeInt)
+	}
+
+	query.Find(&movies)
 	c.JSON(200, gin.H{"success": true, "data": movies})
 }
 
@@ -79,27 +108,28 @@ func GetMoviePublic(c *gin.Context) {
 	var movie models.Movie
 
 	if err := database.DB.First(&movie, "tmdb_id = ?", id).Error; err != nil {
-		verr.Handle(c, verr.NewPublicError(http.StatusNotFound, "Film tidak ditemukan", "Movie lookup failed", err))
+		verr.Handle(c, verr.NewPublicError(http.StatusNotFound, "Konten tidak ditemukan", "Movie lookup failed", err))
 		return
 	}
 
 	c.JSON(200, gin.H{"success": true, "data": movie})
 }
 
-// Handler untuk menghapus film
+// DeleteMovie menghapus konten berdasarkan ID
 func DeleteMovie(c *gin.Context) {
 	id := c.Param("id")
 	if err := database.DB.Delete(&models.Movie{}, id).Error; err != nil {
-		verr.Handle(c, verr.NewAdminError(http.StatusInternalServerError, "Gagal menghapus film", err))
+		verr.Handle(c, verr.NewAdminError(http.StatusInternalServerError, "Gagal menghapus konten", err))
 		return
 	}
-	c.JSON(200, gin.H{"success": true, "message": "Film berhasil dihapus"})
+	c.JSON(200, gin.H{"success": true, "message": "Konten berhasil dihapus"})
 }
 
-// Handler untuk update URL film (tanpa fetch ulang TMDB agar cepat)
+// UpdateMovie update URL + boleh update type juga
 func UpdateMovie(c *gin.Context) {
 	id := c.Param("id")
 	var input struct {
+		Type *int   `json:"type"` // pointer agar bisa detect "tidak dikirim"
 		URL1 string `json:"url1"`
 		URL2 string `json:"url2"`
 		URL3 string `json:"url3"`
@@ -112,11 +142,20 @@ func UpdateMovie(c *gin.Context) {
 
 	var movie models.Movie
 	if err := database.DB.First(&movie, id).Error; err != nil {
-		verr.Handle(c, verr.NewAdminError(http.StatusNotFound, "Film tidak ditemukan", err))
+		verr.Handle(c, verr.NewAdminError(http.StatusNotFound, "Konten tidak ditemukan", err))
 		return
 	}
 
-	// Update field yang diizinkan saja
+	// Update type jika dikirim
+	if input.Type != nil {
+		contentType := models.ContentType(*input.Type)
+		if !contentType.IsValid() {
+			verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "Type tidak valid (1=Movie, 2=Series, 3=Anime)", nil))
+			return
+		}
+		movie.Type = contentType
+	}
+
 	movie.URL1 = input.URL1
 	movie.URL2 = input.URL2
 	movie.URL3 = input.URL3
@@ -136,7 +175,6 @@ func PreviewTMDB(c *gin.Context) {
 		return
 	}
 
-	// Gunakan service TMDB yang sudah kamu buat sebelumnya
 	meta, err := services.FetchMetadata(id)
 	if err != nil {
 		verr.Handle(c, verr.NewAdminError(http.StatusNotFound, "Film tidak ditemukan di TMDB", err))
