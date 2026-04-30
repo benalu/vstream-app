@@ -23,6 +23,7 @@ func GetWatchData(c *gin.Context) {
 	}
 
 	var item models.Movie
+	var seasons []models.Season
 	if err := database.DB.
 		Where("tmdb_id = ? AND type = ?", tmdbID, contentType).
 		First(&item).Error; err != nil {
@@ -32,7 +33,6 @@ func GetWatchData(c *gin.Context) {
 
 	// Untuk series dan anime dengan episode: sertakan seasons
 	if item.Type == "series" || (item.Type == "anime" && item.HasEpisodes) {
-		var seasons []models.Season
 		database.DB.
 			Where("movie_id = ?", item.ID).
 			Order("season_num asc").
@@ -50,11 +50,32 @@ func GetWatchData(c *gin.Context) {
 	}
 
 	// Movie / anime tanpa episode: langsung return item (termasuk URL)
+	type SubtitleDTO struct {
+		ID    uint   `json:"id"`
+		Lang  string `json:"lang"`
+		Label string `json:"label"`
+		URL   string `json:"url"`
+	}
+
+	var rawSubs []models.Subtitle
+	database.DB.Where("movie_id = ?", item.ID).Find(&rawSubs)
+
+	subDTOs := make([]SubtitleDTO, len(rawSubs))
+	for i, s := range rawSubs {
+		subDTOs[i] = SubtitleDTO{
+			ID:    s.ID,
+			Lang:  s.Lang,
+			Label: s.Label,
+			URL:   "/static/subtitles/" + s.Filename,
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"info":    item,
-			"seasons": nil,
+			"info":      item,
+			"seasons":   seasons, // nil untuk movie
+			"subtitles": subDTOs,
 		},
 	})
 }

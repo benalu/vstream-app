@@ -9,6 +9,7 @@ const router = useRouter()
 // ── State ─────────────────────────────────────────────────────
 const info       = ref(null)
 const seasons    = ref([])
+const subtitles  = ref([]) 
 const loading    = ref(true)
 const error      = ref(null)
 
@@ -29,6 +30,7 @@ const fetchWatch = async () => {
 
     info.value    = data.data.info
     seasons.value = data.data.seasons ?? []
+    subtitles.value = data.data.subtitles ?? []
 
     // Default: pilih episode pertama season pertama
     if (seasons.value.length > 0 && seasons.value[0].episodes?.length > 0) {
@@ -83,6 +85,12 @@ const selectEpisode = (ep) => {
   document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+const isDirectVideo = computed(() => {
+  if (!currentUrl.value) return false
+  const url = currentUrl.value.toLowerCase().split('?')[0] // strip query params dulu
+  return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/.test(url)
+})
+
 const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 </script>
 
@@ -120,12 +128,35 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           S{{ activeSeason }}E{{ activeEpisode.ep_num }}
         </span>
       </div>
-
       <!-- ── Player wrap ────────────────────────────────── -->
       <div class="wp-player-wrap">
+        <!-- Video langsung (mp4, mkv, webm, dll) -->
+        <video
+          v-if="currentUrl && isDirectVideo"
+          :key="'video-' + currentUrl"
+          :src="currentUrl"
+          class="wp-video"
+          controls
+          autoplay
+          preload="metadata"
+          controlslist="nodownload"
+        >
+        <track
+          v-for="sub in subtitles"
+          :key="sub.lang"
+          :src="sub.url"
+          :srclang="sub.lang"
+          :label="sub.label"
+          kind="subtitles"
+          :default="sub.lang === 'id'"
+        />
+          Browser Anda tidak mendukung pemutaran video.
+        </video>
+
+        <!-- Embed player (iframe dari layanan streaming) -->
         <iframe
-          v-if="currentUrl"
-          :key="currentUrl"
+          v-else-if="currentUrl && !isDirectVideo"
+          :key="'iframe-' + currentUrl"
           :src="currentUrl"
           class="wp-iframe"
           allowfullscreen
@@ -133,6 +164,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           frameborder="0"
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
         />
+
         <div v-else class="wp-no-url">
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
             <polygon points="5 3 19 12 5 21 5 3" opacity=".3"/>
@@ -319,7 +351,13 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   margin-bottom: 0;
 }
-.wp-iframe { width: 100%; height: 100%; border: none; display: block; }
+.wp-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  outline: none;
+}
 .wp-no-url {
   width: 100%; height: 100%;
   display: flex; flex-direction: column;

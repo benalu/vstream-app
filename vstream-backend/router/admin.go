@@ -16,6 +16,7 @@ func setupAdminRoutes(api *gin.RouterGroup) {
 		registerSeriesRoutes(admin)
 		registerAnimeRoutes(admin)
 		registerSeasonEpisodeRoutes(admin)
+		registerSubtitleRoutes(admin)
 	}
 }
 
@@ -50,4 +51,10 @@ func registerSeasonEpisodeRoutes(admin *gin.RouterGroup) {
 	admin.POST("/seasons/:seasonId/episodes", handlers.AddEpisode)
 	admin.PUT("/episodes/:epId", handlers.UpdateEpisode)
 	admin.DELETE("/episodes/:epId", handlers.DeleteEpisode)
+}
+
+func registerSubtitleRoutes(admin *gin.RouterGroup) {
+	admin.GET("/content/:id/subtitles", handlers.GetSubtitles)
+	admin.POST("/content/:id/subtitles", handlers.UploadSubtitle)
+	admin.DELETE("/subtitles/:subtitleId", handlers.DeleteSubtitle)
 }
