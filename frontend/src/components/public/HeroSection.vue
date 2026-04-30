@@ -37,28 +37,39 @@ const backdropLoaded = ref(false)
     <!-- Content -->
     <div class="hero__content">
       <!-- Meta row -->
-      <div class="hero__meta">
-        <span class="hero__year">{{ content.year }}</span>
-        <span class="hero__dot">·</span>
-        <span
-          v-for="g in content.genres"
-          :key="g"
-          class="hero__genre-pill"
-        >{{ g }}</span>
-      </div>
+      <!-- Meta row: Tag · Rating · Year -->
+    <div class="hero__meta">
+      <!-- Type tag -->
+      <span class="hero__type-badge" :class="`hero__type-badge--${content.type}`">
+        {{ content.type === 'movie' ? 'Movie' : content.type === 'series' ? 'Series' : 'Anime' }}
+      </span>
 
-      <!-- Title -->
-      <h1 class="hero__title">{{ content.title }}</h1>
+      <span class="hero__dot">·</span>
 
       <!-- Rating -->
-      <div class="hero__rating">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b">
+      <div v-if="content.rating" class="hero__rating">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
         <span class="hero__rating-val">{{ content.rating }}</span>
-        <span class="hero__rating-sep">·</span>
-        <span class="hero__rating-label">IMDb</span>
       </div>
+
+      <span class="hero__dot">·</span>
+
+      <!-- Year -->
+      <span class="hero__year">{{ content.year }}</span>
+
+      <!-- Genre pills -->
+      <span class="hero__dot">·</span>
+      <span
+        v-for="g in content.genres"
+        :key="g"
+        class="hero__genre-pill"
+      >{{ g }}</span>
+    </div>
+
+    <!-- Title -->
+    <h1 class="hero__title">{{ content.title }}</h1>
 
       <!-- Overview -->
       <p class="hero__overview">{{ content.overview }}</p>
@@ -179,15 +190,25 @@ const backdropLoaded = ref(false)
   text-shadow: 0 4px 40px rgba(0,0,0,0.5);
 }
 
+/* Type badge */
+.hero__type-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 3px 9px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: #fff;
+}
+.hero__type-badge--movie  { background: rgba(99,102,241,0.85); }
+.hero__type-badge--series { background: rgba(6,182,212,0.85);  }
+.hero__type-badge--anime  { background: rgba(244,63,94,0.85);  }
+
+/* Rating (inline di meta) */
 .hero__rating {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 4px;
 }
-.hero__rating-val { font-size: 14px; font-weight: 700; color: #f59e0b; }
-.hero__rating-sep { color: #64748b; font-size: 12px; }
-.hero__rating-label { font-size: 12px; color: #64748b; }
+.hero__rating-val { font-size: 13px; font-weight: 700; color: #f59e0b; }
+
 
 .hero__overview {
   font-size: 14.5px;

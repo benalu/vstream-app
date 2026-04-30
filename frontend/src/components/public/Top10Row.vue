@@ -81,11 +81,11 @@ const emit = defineEmits(['click'])
 /* Rank */
 .t10__rank {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(68px, 8vw, 110px);
+  font-size: clamp(80px, 9vw, 130px);
   color: transparent;
   -webkit-text-stroke: 2px rgba(255,255,255,0.12);
   line-height: 1;
-  margin-right: -22px;
+  margin-right: -28px;
   z-index: 1;
   flex-shrink: 0;
   align-self: flex-end;
@@ -96,7 +96,7 @@ const emit = defineEmits(['click'])
 /* Poster */
 .t10__poster-wrap {
   position: relative;
-  width: 130px; height: 190px;
+  width: 160px; height: 235px;
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;

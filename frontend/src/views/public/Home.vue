@@ -171,7 +171,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
 /* Main layout */
 .home__main {
   padding: 40px 48px 60px;
-  max-width: 1400px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;

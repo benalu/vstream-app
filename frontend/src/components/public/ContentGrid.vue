@@ -109,8 +109,8 @@ const emit = defineEmits(['cardClick', 'moreClick'])
 /* Grid */
 .cg__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 200px)); /* max 200px per card */
+  gap: 20px;
 }
 
 /* Empty */

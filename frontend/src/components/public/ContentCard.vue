@@ -46,10 +46,20 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
       <span class="cc__type" :class="`cc__type--${item.type}`">
         {{ TYPE_LABEL[item.type] ?? item.type }}
       </span>
+       <!-- Rating badge -->
+      <span v-if="item.rating" class="cc__rating">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="#f59e0b">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        {{ item.rating }}
+      </span>
     </div>
 
     <!-- Info -->
-    <p class="cc__title">{{ item.title }}</p>
+    <div class="cc__info">
+      <p class="cc__title">{{ item.title }}</p>
+      <span v-if="item.year" class="cc__year">{{ item.year }}</span>
+    </div>
   </article>
 </template>
 
@@ -114,12 +124,39 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 .cc__type--series { background: rgba(6,182,212,0.85);  }
 .cc__type--anime  { background: rgba(244,63,94,0.85);  }
 
+/* Rating */
+.cc__rating {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px; font-weight: 700;
+  color: #f59e0b;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(4px);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(245,158,11,0.25);
+}
+
 /* Title */
+.cc__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .cc__title {
   font-size: 12.5px; font-weight: 600;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+.cc__year {
+  font-size: 11px; font-weight: 500;
+  color: #64748b;
+  flex-shrink: 0;
 }
 </style>
