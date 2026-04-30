@@ -30,9 +30,9 @@ const seasonForm       = ref({ season_num: 1, episodes: [{ ep_num: 1, title: '',
 
 // ── Computed ─────────────────────────────────────────────────
 const tabs = [
-  { id: 'movie', label: 'Movies',  icon: 'movie',  color: '#6366f1' },
-  { id: 'series', label: 'Series',  icon: 'series', color: '#06b6d4' },
-  { id: 'anime',   label: 'Anime',   icon: 'anime',  color: '#f43f5e' },
+  { id: 'movie',  label: 'Movies', icon: 'movie',  color: '#6366f1' },
+  { id: 'series', label: 'Series', icon: 'series', color: '#06b6d4' },
+  { id: 'anime',  label: 'Anime',  icon: 'anime',  color: '#f43f5e' },
 ]
 
 const filteredContent = computed(() => {
@@ -185,14 +185,14 @@ const submitSeason = async () => {
   try {
     const item = allContent.value.find(x => x.id === currentSeriesId.value)
     if (!item) return
-    
+
     const endpoint = getEndpoint(item.type)
     await api.post(`${endpoint}/${currentSeriesId.value}/seasons`, seasonForm.value)
-    
+
     // Refresh seasons data
     const res = await api.get(`${endpoint}/${currentSeriesId.value}/seasons`)
     seasons.value[currentSeriesId.value] = res.data.data
-    
+
     showSeasonModal.value = false
   } catch (err) {
     alert(err.response?.data?.error || 'Gagal menambah season')
@@ -539,19 +539,19 @@ onMounted(fetchMovies)
                   alt="Poster"
                 />
                 <div class="mv-preview-info">
-                  <h4 class="mv-preview-title">{{ previewData.title }}</h4>
+                  <h4 class="mv-preview-title">{{ previewData.title || previewData.name }}</h4>
                   <div class="mv-preview-meta">
                     <Star :size="11" style="color:#f59e0b;fill:#f59e0b" />
                     {{ previewData.vote_average?.toFixed(1) }}
                     <span style="opacity:.4">•</span>
                     <Calendar :size="11" />
-                    {{ previewData.release_date?.substring(0,4) || '-' }}
+                    {{ (previewData.release_date || previewData.first_air_date)?.substring(0,4) || '-' }}
                   </div>
                   <p class="mv-preview-desc">{{ previewData.overview }}</p>
                 </div>
               </div>
 
-              <!-- URLs -->
+              <!-- URL Server 1 -->
               <div class="mv-field">
                 <label class="mv-label">
                   Video URL — Server 1
@@ -565,18 +565,7 @@ onMounted(fetchMovies)
                 />
               </div>
 
-              <!-- url2 dan url3 selalu opsional, tampilkan sebagai field-row -->
-              <div class="mv-field-row">
-                <div class="mv-field">
-                  <label class="mv-label">Server 2</label>
-                  <input v-model="form.url2" placeholder="https://..." class="vs-input" />
-                </div>
-                <div class="mv-field">
-                  <label class="mv-label">Server 3</label>
-                  <input v-model="form.url3" placeholder="https://..." class="vs-input" />
-                </div>
-              </div>
-
+              <!-- URL Server 2 & 3 (opsional) -->
               <div class="mv-field-row">
                 <div class="mv-field">
                   <label class="mv-label">Server 2</label>

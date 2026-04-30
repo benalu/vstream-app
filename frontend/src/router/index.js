@@ -8,6 +8,17 @@ const AdminLayout = () => import('@/layouts/AdminLayout.vue')
 const Dashboard   = () => import('@/views/admin/Dashboard.vue')
 const Movies      = () => import('@/views/admin/Movies.vue')
 
+// Cache hasil /auth/me agar tidak hit backend di setiap navigasi.
+// null  = belum pernah dicek
+// true  = sesi valid
+// false = tidak login
+let sessionCache = null
+
+// Dipanggil oleh api.js interceptor saat 401, agar guard re-fetch di navigasi berikutnya
+export const clearSessionCache = () => {
+  sessionCache = null
+}
+
 const routes = [
   // ── Redirect root ke dashboard ───────────────────────────
   {
@@ -20,7 +31,7 @@ const routes = [
     path: '/admin/login',
     name: 'Login',
     component: Login,
-    meta: { requiresGuest: true }, // redirect ke dashboard jika sudah login
+    meta: { requiresGuest: true },
   },
 
   // ── Admin area (butuh auth) ──────────────────────────────
@@ -55,31 +66,28 @@ const router = createRouter({
 })
 
 // ── Navigation Guard ─────────────────────────────────────────
-// Cek validitas session ke backend setiap navigasi ke route yang dilindungi
+// Cek validitas session. Hasil di-cache agar tidak hit /auth/me
+// di setiap navigasi — cache di-reset oleh api.js saat menerima 401.
 router.beforeEach(async (to) => {
   const needsAuth  = to.matched.some((r) => r.meta.requiresAuth)
   const needsGuest = to.matched.some((r) => r.meta.requiresGuest)
 
-  if (!needsAuth && !needsGuest) return true // route bebas
+  if (!needsAuth && !needsGuest) return true
 
-  // Panggil /auth/me — sukses = sesi valid, 401 = belum/tidak login
-  let isLoggedIn = false
-  try {
-    await api.get('/auth/me')
-    isLoggedIn = true
-  } catch {
-    isLoggedIn = false
+  // Gunakan cache jika sudah ada hasil sebelumnya
+  let isLoggedIn = sessionCache
+  if (isLoggedIn === null) {
+    try {
+      await api.get('/auth/me')
+      isLoggedIn = true
+    } catch {
+      isLoggedIn = false
+    }
+    sessionCache = isLoggedIn
   }
 
-  if (needsAuth && !isLoggedIn) {
-    // Belum login → ke halaman login
-    return { name: 'Login' }
-  }
-
-  if (needsGuest && isLoggedIn) {
-    // Sudah login → tidak perlu ke halaman login lagi
-    return { name: 'Dashboard' }
-  }
+  if (needsAuth && !isLoggedIn) return { name: 'Login' }
+  if (needsGuest && isLoggedIn) return { name: 'Dashboard' }
 
   return true
 })

@@ -11,6 +11,7 @@ func setupAdminRoutes(api *gin.RouterGroup) {
 	admin := api.Group("/admin")
 	admin.Use(middleware.RequireAdmin)
 	{
+		admin.GET("/dashboard", handlers.GetDashboardStats)
 		registerMovieRoutes(admin)
 		registerSeriesRoutes(admin)
 		registerAnimeRoutes(admin)

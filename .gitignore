@@ -39,6 +39,7 @@ pnpm-lock.yaml
 /vstream-backend/.air/
 /vstream-backend/*.env
 /vstream-backend/data/
+/vstream-backend/tmp/
 
 # Editor / system files
 *.swp
