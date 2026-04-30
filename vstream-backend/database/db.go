@@ -35,7 +35,7 @@ func InitDB() {
 	db.Exec("PRAGMA journal_mode=WAL;")
 	db.Exec("PRAGMA synchronous=NORMAL;")
 
-	if err := db.AutoMigrate(&models.Movie{}, &models.WatchSession{}); err != nil {
+	if err := db.AutoMigrate(&models.Movie{}, &models.WatchSession{}, &models.Season{}, &models.Episode{}); err != nil {
 		slog.Error("Migration failed", "err", err)
 		os.Exit(1)
 	}

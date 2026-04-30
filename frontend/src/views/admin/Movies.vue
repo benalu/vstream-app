@@ -16,22 +16,23 @@ const currentId   = ref(null)
 const isSearchingTMDB = ref(false)
 const previewData = ref(null)
 const searchQuery = ref('')
-const activeTab   = ref(1) // 1=movie, 2=series, 3=anime
+const activeTab   = ref('movie') // 'movie', 'series', 'anime'
 const expandedRows = ref(new Set()) // set of content IDs yang di-expand
 
-const form = ref({ tmdb_id: '', type: 1, url1: '', url2: '', url3: '' })
+const form = ref({ tmdb_id: '', type: 'movie', has_episodes: false, url1: '', url2: '', url3: '' })
 
 // Season/episode management
 const showSeasonModal  = ref(false)
 const currentSeriesId  = ref(null)
 const seasons          = ref({}) // { [contentId]: [{season_num, episodes:[]}] }
+const seasonsLoading   = ref({})
 const seasonForm       = ref({ season_num: 1, episodes: [{ ep_num: 1, title: '', url1: '', url2: '' }] })
 
 // ── Computed ─────────────────────────────────────────────────
 const tabs = [
-  { id: 1, label: 'Movies',  icon: 'movie',  color: '#6366f1' },
-  { id: 2, label: 'Series',  icon: 'series', color: '#06b6d4' },
-  { id: 3, label: 'Anime',   icon: 'anime',  color: '#f43f5e' },
+  { id: 'movie', label: 'Movies',  icon: 'movie',  color: '#6366f1' },
+  { id: 'series', label: 'Series',  icon: 'series', color: '#06b6d4' },
+  { id: 'anime',   label: 'Anime',   icon: 'anime',  color: '#f43f5e' },
 ]
 
 const filteredContent = computed(() => {
@@ -52,8 +53,16 @@ const tabCount = (typeId) => allContent.value.filter(m => m.type === typeId).len
 const fetchMovies = async () => {
   loading.value = true
   try {
-    const res = await api.get('/admin/movies')
-    allContent.value = res.data.data
+    const [movRes, serRes, anmRes] = await Promise.all([
+      api.get('/admin/movies'),
+      api.get('/admin/series'),
+      api.get('/admin/anime'),
+    ])
+    allContent.value = [
+      ...(movRes.data.data || []),
+      ...(serRes.data.data || []),
+      ...(anmRes.data.data || []),
+    ]
   } catch (err) { console.error(err) }
   finally { loading.value = false }
 }
@@ -72,13 +81,19 @@ const searchTMDB = async () => {
   }
 }
 
+const getEndpoint = (type) => {
+  const endpoints = { movie: '/admin/movies', series: '/admin/series', anime: '/admin/anime' }
+  return endpoints[type] || '/admin/movies'
+}
+
 const submitMovie = async () => {
   loading.value = true
   try {
+    const endpoint = getEndpoint(form.value.type)
     if (isEdit.value) {
-      await api.put(`/admin/movies/${currentId.value}`, form.value)
+      await api.put(`${endpoint}/${currentId.value}`, form.value)
     } else {
-      await api.post('/admin/movies', form.value)
+      await api.post(endpoint, form.value)
     }
     showModal.value = false
     resetForm()
@@ -90,10 +105,11 @@ const submitMovie = async () => {
   }
 }
 
-const deleteMovie = async (id) => {
+const deleteMovie = async (item) => {
   if (!confirm('Apakah Anda yakin ingin menghapus konten ini?')) return
   try {
-    await api.delete(`/admin/movies/${id}`)
+    const endpoint = getEndpoint(item.type)
+    await api.delete(`${endpoint}/${item.id}`)
     await fetchMovies()
   } catch {
     alert('Gagal menghapus konten')
@@ -106,6 +122,7 @@ const openEditModal = (item) => {
   form.value = {
     tmdb_id: item.tmdb_id,
     type: item.type,
+    has_episodes: item.has_episodes || false,
     url1: item.url1,
     url2: item.url2,
     url3: item.url3
@@ -116,22 +133,32 @@ const openEditModal = (item) => {
 const resetForm = () => {
   isEdit.value = false
   currentId.value = null
-  form.value = { tmdb_id: '', type: activeTab.value, url1: '', url2: '', url3: '' }
+  form.value = { tmdb_id: '', type: activeTab.value, has_episodes: false, url1: '', url2: '', url3: '' }
   previewData.value = null
 }
 
 // ── Expand row (series/anime) ────────────────────────────────
-const toggleExpand = (id) => {
-  if (expandedRows.value.has(id)) {
-    expandedRows.value.delete(id)
-  } else {
-    expandedRows.value.add(id)
-    // Load seasons if not yet loaded
-    if (!seasons.value[id]) {
-      seasons.value[id] = [] // placeholder — fetch dari API kalau sudah ada endpoint season
+const toggleExpand = async (item) => {
+  if (expandedRows.value.has(item.id)) {
+    expandedRows.value.delete(item.id)
+    expandedRows.value = new Set(expandedRows.value)
+    return
+  }
+  expandedRows.value.add(item.id)
+  expandedRows.value = new Set(expandedRows.value)
+
+  if (!seasons.value[item.id]) {
+    seasonsLoading.value[item.id] = true
+    try {
+      const endpoint = getEndpoint(item.type)
+      const res = await api.get(`${endpoint}/${item.id}/seasons`)
+      seasons.value[item.id] = res.data.data
+    } catch {
+      seasons.value[item.id] = []
+    } finally {
+      seasonsLoading.value[item.id] = false
     }
   }
-  expandedRows.value = new Set(expandedRows.value)
 }
 
 const openAddSeasonModal = (seriesId) => {
@@ -150,11 +177,22 @@ const removeEpisode = (i) => {
     seasonForm.value.episodes.splice(i, 1)
 }
 
-const submitSeason = () => {
-  const id = currentSeriesId.value
-  if (!seasons.value[id]) seasons.value[id] = []
-  seasons.value[id].push({ ...seasonForm.value })
-  showSeasonModal.value = false
+const submitSeason = async () => {
+  try {
+    const item = allContent.value.find(x => x.id === currentSeriesId.value)
+    if (!item) return
+    
+    const endpoint = getEndpoint(item.type)
+    await api.post(`${endpoint}/${currentSeriesId.value}/seasons`, seasonForm.value)
+    
+    // Refresh seasons data
+    const res = await api.get(`${endpoint}/${currentSeriesId.value}/seasons`)
+    seasons.value[currentSeriesId.value] = res.data.data
+    
+    showSeasonModal.value = false
+  } catch (err) {
+    alert(err.response?.data?.error || 'Gagal menambah season')
+  }
 }
 
 onMounted(fetchMovies)
@@ -193,8 +231,8 @@ onMounted(fetchMovies)
             @click="activeTab = tab.id; searchQuery = ''"
           >
             <span class="mv-tab-icon">
-              <Film v-if="tab.id === 1" :size="13" />
-              <Tv  v-else-if="tab.id === 2" :size="13" />
+              <Film v-if="tab.id === 'movie'" :size="13" />
+              <Tv  v-else-if="tab.id === 'series'" :size="13" />
               <Sparkles v-else :size="13" />
             </span>
             {{ tab.label }}
@@ -237,7 +275,7 @@ onMounted(fetchMovies)
         <table class="mv-table">
           <thead>
             <tr>
-              <th class="mv-th mv-th--expand" v-if="activeTab !== 1"></th>
+              <th class="mv-th mv-th--expand" v-if="activeTab !== 'movie'"></th>
               <th class="mv-th mv-th--main">Judul</th>
               <th class="mv-th mv-th--type">Kategori</th>
               <th class="mv-th mv-th--hide-sm">Genre</th>
@@ -254,7 +292,7 @@ onMounted(fetchMovies)
                 :class="{ 'mv-tr--expanded': expandedRows.has(item.id) }"
               >
                 <!-- Expand toggle (series/anime only) -->
-                <td v-if="activeTab !== 1" class="mv-td mv-td--expand" @click="toggleExpand(item.id)">
+                <td v-if="activeTab !== 'movie'" class="mv-td mv-td--expand" @click="toggleExpand(item)">
                   <button class="mv-expand-btn">
                     <ChevronDown v-if="expandedRows.has(item.id)" :size="14" />
                     <ChevronRight v-else :size="14" />
@@ -282,15 +320,15 @@ onMounted(fetchMovies)
                   <span
                     class="mv-type-badge"
                     :class="{
-                      'mv-type-badge--movie':  item.type === 1,
-                      'mv-type-badge--series': item.type === 2,
-                      'mv-type-badge--anime':  item.type === 3,
+                      'mv-type-badge--movie':  item.type === 'movie',
+                      'mv-type-badge--series': item.type === 'series',
+                      'mv-type-badge--anime':  item.type === 'anime',
                     }"
                   >
-                    <Film      v-if="item.type === 1" :size="10" />
-                    <Tv        v-else-if="item.type === 2" :size="10" />
+                    <Film      v-if="item.type === 'movie'" :size="10" />
+                    <Tv        v-else-if="item.type === 'series'" :size="10" />
                     <Sparkles  v-else :size="10" />
-                    {{ item.type === 1 ? 'Movie' : item.type === 2 ? 'Series' : 'Anime' }}
+                    {{ item.type === 'movie' ? 'Movie' : item.type === 'series' ? 'Series' : 'Anime' }}
                   </span>
                 </td>
 
@@ -313,17 +351,17 @@ onMounted(fetchMovies)
                   <div class="mv-actions">
                     <!-- Add Season (series/anime only) -->
                     <button
-                      v-if="activeTab !== 1"
+                      v-if="activeTab !== 'movie'"
                       class="mv-action-btn mv-action-btn--season"
                       title="Tambah Season"
-                      @click="toggleExpand(item.id); openAddSeasonModal(item.id)"
+                      @click="toggleExpand(item); openAddSeasonModal(item.id)"
                     >
                       <Plus :size="13" />
                     </button>
                     <button class="mv-action-btn mv-action-btn--edit" @click="openEditModal(item)" title="Edit">
                       <Edit3 :size="14" />
                     </button>
-                    <button class="mv-action-btn mv-action-btn--delete" @click="deleteMovie(item.id)" title="Hapus">
+                    <button class="mv-action-btn mv-action-btn--delete" @click="deleteMovie(item)" title="Hapus">
                       <Trash2 :size="14" />
                     </button>
                   </div>
@@ -331,7 +369,7 @@ onMounted(fetchMovies)
               </tr>
 
               <!-- Expanded seasons row (series/anime) -->
-              <tr v-if="activeTab !== 1 && expandedRows.has(item.id)" class="mv-tr-expanded">
+              <tr v-if="activeTab !== 'movie' && expandedRows.has(item.id)" class="mv-tr-expanded">
                 <td :colspan="7" class="mv-td-expanded">
                   <div class="mv-seasons-wrap">
 
@@ -395,11 +433,11 @@ onMounted(fetchMovies)
 
             <!-- Empty state -->
             <tr v-if="filteredContent.length === 0 && !loading">
-              <td :colspan="activeTab !== 1 ? 7 : 6" class="mv-empty">
-                <Film v-if="activeTab === 1" :size="32" />
-                <Tv   v-else-if="activeTab === 2" :size="32" />
+              <td :colspan="activeTab !== 'movie' ? 7 : 6" class="mv-empty">
+                <Film v-if="activeTab === 'movie'" :size="32" />
+                <Tv   v-else-if="activeTab === 'series'" :size="32" />
                 <Sparkles v-else :size="32" />
-                <p>Belum ada {{ activeTab === 1 ? 'movie' : activeTab === 2 ? 'series' : 'anime' }}</p>
+                <p>Belum ada {{ activeTab === 'movie' ? 'movie' : activeTab === 'series' ? 'series' : 'anime' }}</p>
                 <p class="mv-empty-sub">Klik "Tambah Konten" untuk menambahkan</p>
               </td>
             </tr>
@@ -442,12 +480,21 @@ onMounted(fetchMovies)
                     :style="form.type === tab.id ? `--opt-color: ${tab.color}` : ''"
                     @click="form.type = tab.id"
                   >
-                    <Film     v-if="tab.id === 1" :size="13" />
-                    <Tv       v-else-if="tab.id === 2" :size="13" />
+                    <Film     v-if="tab.id === 'movie'" :size="13" />
+                    <Tv       v-else-if="tab.id === 'series'" :size="13" />
                     <Sparkles v-else :size="13" />
                     {{ tab.label }}
                   </button>
                 </div>
+              </div>
+
+              <!-- Has Episodes (anime only) -->
+              <div v-if="form.type === 'anime'" class="mv-field">
+                <label class="mv-label">
+                  <input type="checkbox" v-model="form.has_episodes" style="margin-right:6px" />
+                  Anime dengan Episode/Season
+                </label>
+                <p class="mv-field-hint">Jika dipilih, URL diisi di level episode bukan konten</p>
               </div>
 
               <!-- TMDB ID -->
@@ -498,8 +545,14 @@ onMounted(fetchMovies)
 
               <!-- URLs -->
               <div class="mv-field">
-                <label class="mv-label">Video URL — Server 1 <span class="mv-label-required">*</span></label>
-                <input v-model="form.url1" placeholder="https://..." required class="vs-input" />
+                <label class="mv-label">Video URL — Server 1 <span v-if="form.type !== 'series' && !form.has_episodes" class="mv-label-required">*</span></label>
+                <input 
+                  v-model="form.url1" 
+                  placeholder="https://..." 
+                  :required="form.type !== 'series' && !form.has_episodes"
+                  class="vs-input" 
+                />
+                <p v-if="form.type === 'series' || form.has_episodes" class="mv-field-hint">URL diisi di level episode/season, bukan di sini</p>
               </div>
 
               <div class="mv-field-row">

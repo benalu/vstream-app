@@ -61,16 +61,38 @@ func main() {
 		admin := api.Group("/admin")
 		admin.Use(middleware.RequireAdmin)
 		{
-			admin.GET("/dashboard", handlers.GetDashboardStats)
-			admin.GET("/tmdb/:id", handlers.PreviewTMDB)
+			// Movies
 			admin.POST("/movies", handlers.AddMovie)
 			admin.GET("/movies", handlers.GetAllMovies)
 			admin.PUT("/movies/:id", handlers.UpdateMovie)
 			admin.DELETE("/movies/:id", handlers.DeleteMovie)
+
+			// Series
+			admin.POST("/series", handlers.AddSeries)
+			admin.GET("/series", handlers.GetAllSeries)
+			admin.PUT("/series/:id", handlers.UpdateSeries)
+			admin.DELETE("/series/:id", handlers.DeleteSeries)
+			admin.GET("/series/:id/seasons", handlers.GetSeriesSeasons)
+			admin.POST("/series/:id/seasons", handlers.AddSeriesSeason)
+
+			// Anime
+			admin.POST("/anime", handlers.AddAnime)
+			admin.GET("/anime", handlers.GetAllAnime)
+			admin.PUT("/anime/:id", handlers.UpdateAnime)
+			admin.DELETE("/anime/:id", handlers.DeleteAnime)
+			admin.GET("/anime/:id/seasons", handlers.GetAnimeSeasons)
+			admin.POST("/anime/:id/seasons", handlers.AddAnimeSeason)
+
+			// Season & Episode (shared)
+			admin.DELETE("/seasons/:seasonId", handlers.DeleteSeason)
+			admin.PUT("/episodes/:epId", handlers.UpdateEpisode)
+			admin.DELETE("/episodes/:epId", handlers.DeleteEpisode)
 		}
 
 		// ── Public (tanpa auth) ──────────────────────────────────
 		api.GET("/movies/:id", handlers.GetMoviePublic)
+		api.GET("/series/:id", handlers.GetSeriesPublic)
+		api.GET("/anime/:id", handlers.GetAnimePublic)
 	}
 
 	port := os.Getenv("PORT")
