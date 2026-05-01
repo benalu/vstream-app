@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,9 +27,12 @@ func buildMovieFromTMDB(tmdbID string, contentType string, hasEpisodes bool, url
 		genres = append(genres, g.Name)
 	}
 
-	var logo string
-	if len(meta.Images.Logos) > 0 {
-		logo = "https://image.tmdb.org/t/p/original" + meta.Images.Logos[0].FilePath
+	logos, _ := services.FetchLogos(tmdbID, contentType)
+	logosJSON := "[]"
+	if len(logos) > 0 {
+		if b, err := json.Marshal(logos); err == nil {
+			logosJSON = string(b)
+		}
 	}
 
 	return &models.Movie{
@@ -42,7 +46,7 @@ func buildMovieFromTMDB(tmdbID string, contentType string, hasEpisodes bool, url
 		Genre:       strings.Join(genres, ", "),
 		Poster:      "https://image.tmdb.org/t/p/original" + meta.PosterPath,
 		Backdrop:    "https://image.tmdb.org/t/p/original" + meta.BackdropPath,
-		LogoPath:    logo,
+		Logos:       logosJSON,
 		Overview:    meta.Overview,
 		URL1:        url1,
 		URL2:        url2,

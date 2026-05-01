@@ -20,25 +20,28 @@ const publicApi = axios.create({
  */
 export function useContent() {
   // ── State ────────────────────────────────────────────────────
-  const featured = ref(null)
-  const top10    = ref([])
-  const movies   = ref([])
-  const series   = ref([])
-  const anime    = ref([])
+  const featured     = ref(null)
+  const heroSlides   = ref([])
+  const top10        = ref([])
+  const movies       = ref([])
+  const series       = ref([])
+  const anime        = ref([])
 
   // Per-request loading flags
-  const loadingFeatured = ref(false)
-  const loadingTop10    = ref(false)
-  const loadingMovies   = ref(false)
-  const loadingSeries   = ref(false)
-  const loadingAnime    = ref(false)
+  const loadingFeatured    = ref(false)
+  const loadingHeroSlides  = ref(false)
+  const loadingTop10       = ref(false)
+  const loadingMovies      = ref(false)
+  const loadingSeries      = ref(false)
+  const loadingAnime       = ref(false)
 
   // Errors — null means no error
-  const errorFeatured = ref(null)
-  const errorTop10    = ref(null)
-  const errorMovies   = ref(null)
-  const errorSeries   = ref(null)
-  const errorAnime    = ref(null)
+  const errorFeatured     = ref(null)
+  const errorHeroSlides   = ref(null)
+  const errorTop10        = ref(null)
+  const errorMovies       = ref(null)
+  const errorSeries       = ref(null)
+  const errorAnime        = ref(null)
 
   // Convenience: any fetch in-flight
   const loading = computed(() =>
@@ -72,6 +75,21 @@ export function useContent() {
       console.error('[useContent] fetchFeatured:', err)
     } finally {
       loadingFeatured.value = false
+    }
+  }
+  const fetchHeroSlides = async () => {
+    loadingHeroSlides.value = true
+    errorHeroSlides.value = null
+    try {
+      const res = await publicApi.get('/hero-slides')
+      heroSlides.value = res.data.data ?? []
+      // featured tetap pakai slide pertama untuk backward compat
+      featured.value = heroSlides.value[0]?.movie ?? null
+    } catch (err) {
+      errorHeroSlides.value = err.message
+      console.error('[useContent] fetchHeroSlides:', err)
+    } finally {
+      loadingHeroSlides.value = false
     }
   }
 
@@ -124,7 +142,7 @@ export function useContent() {
    * Use this on Home page mount.
    */
   const fetchAll = () => Promise.all([
-    fetchFeatured(),
+    fetchHeroSlides(),
     fetchTop10(),
     fetchListing('movie'),
     fetchListing('series'),
@@ -144,6 +162,7 @@ export function useContent() {
   return {
     // data
     featured,
+    heroSlides,
     top10,
     movies,
     series,
@@ -169,6 +188,7 @@ export function useContent() {
     // actions
     fetchAll,
     fetchFeatured,
+    fetchHeroSlides,
     fetchTop10,
     fetchListing,
   }

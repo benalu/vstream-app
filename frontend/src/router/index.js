@@ -9,6 +9,8 @@ const Login       = () => import('@/views/admin/Login.vue')
 const AdminLayout = () => import('@/layouts/AdminLayout.vue')
 const Dashboard   = () => import('@/views/admin/Dashboard.vue')
 const Movies      = () => import('@/views/admin/Movies.vue')
+const HeroSlides  = () => import('@/views/admin/HeroSlides.vue')
+
 
 // Cache session
 let sessionCache = null
@@ -41,8 +43,9 @@ const routes = [
     component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
-      { path: '',       name: 'Dashboard', component: Dashboard },
-      { path: 'movies', name: 'Movies',    component: Movies    },
+      { path: '',       name: 'Dashboard',    component: Dashboard },
+      { path: 'movies', name: 'Movies',       component: Movies    },
+      { path: 'hero-slides', name: 'Hero',    component: HeroSlides    },
     ],
   },
 

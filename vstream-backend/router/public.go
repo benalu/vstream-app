@@ -17,8 +17,9 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 	}
 
 	// ── Aggregated endpoints ───────────────────────────────────
-	api.GET("/featured", handlers.GetFeatured) // hero section
-	api.GET("/top10", handlers.GetTop10)       // TOP 10 row
+	api.GET("/featured", handlers.GetFeatured)      // hero section
+	api.GET("/hero-slides", handlers.GetHeroSlides) // hero slider
+	api.GET("/top10", handlers.GetTop10)            // TOP 10 row
 
 	// ── Public listings ───────────────────────────────────────
 	api.GET("/movies", handlers.GetMoviesPublicList) // ?limit=&offset=

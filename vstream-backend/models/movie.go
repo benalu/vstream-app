@@ -18,7 +18,7 @@ type Movie struct {
 	Genre       string `json:"genre"`
 	Poster      string `json:"poster"`
 	Backdrop    string `json:"backdrop"`
-	LogoPath    string `json:"logo_path"`
+	Logos       string `json:"logos"`
 	Overview    string `json:"overview"`
 	URL1        string `json:"url1"`
 	URL2        string `json:"url2"`

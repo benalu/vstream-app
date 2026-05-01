@@ -43,6 +43,16 @@
           <span>Kelola Film</span>
           <span class="vs-nav-item__dot" />
         </router-link>
+        <router-link to="/admin/hero-slides" class="vs-nav-item" active-class="vs-nav-item--active">
+          <span class="vs-nav-item__icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="15" rx="2"/>
+              <path d="M16 3l-4 4-4-4"/>
+            </svg>
+          </span>
+          <span>Hero Slider</span>
+          <span class="vs-nav-item__dot" />
+      </router-link>
       </nav>
 
       <!-- Footer: user + tombol logout -->

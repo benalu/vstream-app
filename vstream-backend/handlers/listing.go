@@ -103,7 +103,7 @@ type PublicMovie struct {
 	Genre       string `json:"genre"`
 	Poster      string `json:"poster"`
 	Backdrop    string `json:"backdrop"`
-	LogoPath    string `json:"logo_path"`
+	Logos       string `json:"logos"`
 	Overview    string `json:"overview"`
 }
 
@@ -120,7 +120,7 @@ func sanitize(m models.Movie) PublicMovie {
 		Genre:       m.Genre,
 		Poster:      m.Poster,
 		Backdrop:    m.Backdrop,
-		LogoPath:    m.LogoPath,
+		Logos:       m.Logos,
 		Overview:    m.Overview,
 	}
 }

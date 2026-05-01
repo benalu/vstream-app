@@ -11,6 +11,7 @@ import { useContent } from '@/composables/useContent'
 
 // ── Data ─────────────────────────────────────────────────────
 const {
+  heroSlides,
   featured,
   top10,
   recentlyAdded,
@@ -62,8 +63,8 @@ const handleMoreClick = ()     => console.log('lihat semua')
 
     <!-- Hero: data nyata -->
     <HeroSection
-      v-else-if="featured"
-      :content="featured"
+      v-else-if="heroSlides.length > 0"
+      :slides="heroSlides"
       @play="handlePlay"
       @more="handleMore"
     />
