@@ -25,7 +25,33 @@ const fetchDashboardData = async () => {
   }
 }
 
-onMounted(fetchDashboardData)
+const playbackLogs = ref({ logs: [], summary: [] })
+const clearingLogs = ref(false)
+
+const fetchPlaybackLogs = async () => {
+  try {
+    const res = await api.get('/admin/playback-logs')
+    playbackLogs.value = res.data.data
+  } catch (err) {
+    console.error('Gagal fetch playback logs', err)
+  }
+}
+
+const clearLogs = async () => {
+  if (!confirm('Hapus semua log error?')) return
+  clearingLogs.value = true
+  try {
+    await api.delete('/admin/playback-logs')
+    playbackLogs.value = { logs: [], summary: [] }
+  } finally {
+    clearingLogs.value = false
+  }
+}
+
+onMounted(() => {
+  fetchDashboardData()
+  fetchPlaybackLogs()
+})
 </script>
 
 <template>
@@ -209,7 +235,58 @@ onMounted(fetchDashboardData)
           <p class="db-mini-stat__sub">30 hari terakhir</p>
         </div>
       </div>
+      <!-- Playback Error Monitor -->
+      <div class="vs-card" style="margin-top:14px">
+        <div class="db-section-header">
+          <h2 class="db-section-title">Playback Error Monitor</h2>
+          <button
+            class="vs-btn vs-btn--ghost"
+            style="padding:5px 12px;font-size:12px"
+            @click="clearLogs"
+            :disabled="clearingLogs"
+          >
+            Hapus Log
+          </button>
+        </div>
 
+        <!-- Summary: film paling sering error -->
+        <div v-if="playbackLogs.summary?.length" class="db-plog-summary">
+          <p class="db-plog-summary-label">Paling sering error</p>
+          <div
+            v-for="item in playbackLogs.summary"
+            :key="item.movie_id"
+            class="db-plog-summary-row"
+          >
+            <span class="db-plog-summary-title">{{ item.movie_title }}</span>
+            <span class="db-plog-badge">{{ item.error_count }}x</span>
+          </div>
+        </div>
+
+        <!-- Log kosong -->
+        <div v-if="!playbackLogs.logs?.length" class="db-plog-empty">
+          Belum ada error dilaporkan oleh user.
+        </div>
+
+        <!-- Log list -->
+        <div v-else>
+          <div
+            v-for="log in playbackLogs.logs"
+            :key="log.id"
+            class="db-plog-row"
+          >
+            <span class="db-plog-dot" />
+            <div class="db-plog-info">
+              <span class="db-plog-title">{{ log.movie_title }}</span>
+              <span class="db-plog-meta">
+                <span class="db-plog-server">{{ log.server.toUpperCase() }}</span>
+                · {{ log.error_type }}
+                · {{ new Date(log.reported_at).toLocaleString('id-ID') }}
+              </span>
+            </div>
+            <router-link to="/admin/movies" class="db-plog-fix">Fix →</router-link>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -449,6 +526,73 @@ onMounted(fetchDashboardData)
 
 .db-loading-list { display: flex; flex-direction: column; }
 .db-skeleton-info { flex: 1; padding: 4px 0; }
+
+/* ── Playback Log ───────────────────────────────────────── */
+.db-plog-summary {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-plog-summary-label {
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); margin-bottom: 2px;
+}
+.db-plog-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+.db-plog-summary-title { color: var(--text); }
+.db-plog-badge {
+  font-size: 11px; font-weight: 700; color: var(--danger);
+  background: rgba(239,68,68,0.1);
+  padding: 1px 7px; border-radius: 4px;
+}
+
+.db-plog-empty {
+  padding: 32px; text-align: center;
+  font-size: 13px; color: var(--muted2);
+}
+
+.db-plog-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border2);
+  background: rgba(239,68,68,0.02);
+  transition: background 0.15s;
+}
+.db-plog-row:last-child { border-bottom: none; }
+.db-plog-row:hover { background: rgba(239,68,68,0.05); }
+
+.db-plog-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
+}
+.db-plog-info { flex: 1; min-width: 0; }
+.db-plog-title {
+  display: block; font-size: 13px; font-weight: 500; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.db-plog-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+.db-plog-server {
+  font-weight: 700; color: var(--accent-hi);
+  background: var(--accent-lo);
+  padding: 1px 5px; border-radius: 3px;
+}
+.db-plog-fix {
+  font-size: 11.5px; color: var(--accent-hi);
+  text-decoration: none; flex-shrink: 0;
+  opacity: 0.7; transition: opacity 0.15s;
+}
+.db-plog-fix:hover { opacity: 1; }
 
 /* ── Empty ──────────────────────────────────────────────── */
 .db-empty {

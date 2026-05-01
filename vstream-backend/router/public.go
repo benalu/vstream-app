@@ -33,4 +33,8 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 
 	// ── Watch data (includes stream URLs) ─────────────────────
 	api.GET("/watch/:type/:tmdb_id", handlers.GetWatchData)
+
+	// ── Playback error logging ─────────────────────────────────
+	api.POST("/logs/playback-error", handlers.ReportPlaybackError)
+
 }

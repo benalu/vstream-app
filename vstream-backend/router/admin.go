@@ -18,6 +18,7 @@ func setupAdminRoutes(api *gin.RouterGroup) {
 		registerSeasonEpisodeRoutes(admin)
 		registerSubtitleRoutes(admin)
 		registerHeroSlideRoutes(admin)
+		registerPlaybackLogRoutes(admin)
 	}
 }
 
@@ -65,4 +66,9 @@ func registerHeroSlideRoutes(admin *gin.RouterGroup) {
 	admin.POST("/hero-slides", handlers.AddHeroSlide)
 	admin.PUT("/hero-slides/:id", handlers.UpdateHeroSlideOrder)
 	admin.DELETE("/hero-slides/:id", handlers.DeleteHeroSlide)
+}
+
+func registerPlaybackLogRoutes(admin *gin.RouterGroup) {
+	admin.GET("/playback-logs", handlers.GetPlaybackLogs)
+	admin.DELETE("/playback-logs", handlers.ClearPlaybackLogs)
 }

@@ -16,8 +16,28 @@ const error      = ref(null)
 const activeServer  = ref(1)
 const activeSeason  = ref(1)
 const activeEpisode = ref(null)
+const hasError      = ref(false)
 
 // ── Fetch ──────────────────────────────────────────────────────
+const reportError = async (errorType = 'load_error') => {
+  hasError.value = true  // tampilkan tombol lapor
+  if (!info.value?.id) return
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+    await fetch(`${base}/logs/playback-error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        movie_id:   info.value.id,
+        server:     `url${activeServer.value}`,
+        error_type: errorType,
+      }),
+    })
+  } catch {
+    // Jangan ganggu user kalau laporan gagal
+  }
+}
+
 const fetchWatch = async () => {
   loading.value = true
   error.value   = null
@@ -81,9 +101,13 @@ const currentUrl = computed(() => {
 const selectEpisode = (ep) => {
   activeEpisode.value = ep
   activeServer.value  = 1
-  // Scroll ke player
+  hasError.value      = false  // reset error saat ganti episode
   document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+
+watch(activeServer, () => {
+  hasError.value = false  // reset error saat ganti server
+})
 
 const isDirectVideo = computed(() => {
   if (!currentUrl.value) return false
@@ -140,6 +164,8 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           autoplay
           preload="metadata"
           controlslist="nodownload"
+          @error="reportError('load_error')"
+          @stalled="reportError('stalled')"
         >
         <track
           v-for="sub in subtitles"
@@ -171,6 +197,14 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </svg>
           <p>URL stream belum tersedia</p>
         </div>
+      </div>
+
+      <!-- ── Report bar ─────────────────────────────────── -->
+      <div v-if="hasError" class="wp-report-bar">
+        <span class="wp-report-label">Video tidak bisa diputar?</span>
+        <button class="wp-report-btn" @click="reportError('manual')">
+          Laporkan Server {{ activeServer }}
+        </button>
       </div>
 
       <!-- ── Server selector ───────────────────────────── -->
@@ -308,6 +342,31 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   transition: all 0.15s; font-family: inherit;
 }
 .wp-back-btn:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+
+.wp-report-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 6px 0;
+}
+.wp-report-label {
+  font-size: 11.5px;
+  color: #475569;
+}
+.wp-report-btn {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #ef4444;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.wp-report-btn:hover { background: rgba(239,68,68,0.15); }
 
 /* ── Page wrapper ────────────────────────────────────── */
 .wp-page {
