@@ -7,7 +7,8 @@ const slides = ref([])
 const allContent = ref([])
 const loading = ref(false)
 const showModal = ref(false)
-const form = ref({ movie_id: '', order: 1 })
+const selectedMovieId = ref(0)
+const selectedOrder = ref(1)
 
 const fetchSlides = async () => {
   loading.value = true
@@ -39,21 +40,36 @@ const fetchAllContent = async () => {
 }
 
 const addSlide = async () => {
-  const movieId = Number(form.value.movie_id)
-  if (!movieId) return
+  console.log('addSlide called, selectedMovieId:', selectedMovieId.value)
+  if (!selectedMovieId.value) {
+    console.log('BLOCKED: selectedMovieId is falsy')
+    return
+  }
   try {
-    await api.post('/admin/hero-slides', {
-      movie_id: movieId,
-      order: form.value.order,
-    })
+    const payload = {
+      movie_id: selectedMovieId.value,
+      order: selectedOrder.value,
+    }
+    console.log('Posting payload:', payload)
+    const res = await api.post('/admin/hero-slides', payload)
+    console.log('Response:', res.data)
     showModal.value = false
-    form.value = { movie_id: null, order: slides.value.length + 1 }
     await fetchSlides()
   } catch (err) {
+    console.error('Full error:', err)
+    console.error('Response data:', err.response?.data)
     alert(err.response?.data?.error || 'Gagal menambah slide')
   }
 }
 
+const onSelectChange = (event) => {
+  const idx = event.target.selectedIndex - 1 // minus 1 karena ada option disabled di index 0
+  const content = availableContent()
+  if (idx >= 0 && content[idx]) {
+    selectedMovieId.value = content[idx].id
+    console.log('Selected id:', selectedMovieId.value)
+  }
+}
 const deleteSlide = async (id) => {
   if (!confirm('Hapus slide ini?')) return
   try {
@@ -73,13 +89,18 @@ const updateOrder = async (slide, newOrder) => {
   }
 }
 
-// Filter konten yang belum jadi slide
 const availableContent = () => {
-  const usedIds = slides.value.map(s => s.movie?.id)
-  return allContent.value.filter(c => !usedIds.includes(c.id))
+  const usedIds = slides.value.map(s => Number(s.movie?.id)).filter(Boolean)
+  return allContent.value.filter(c => !usedIds.includes(Number(c.id)))
 }
+
+const selectedPreview = () => {
+  return allContent.value.find(c => c.id === selectedMovieId.value) ?? null
+}
+
 const openAddModal = () => {
-  form.value = { movie_id: '', order: slides.value.length + 1 }
+  selectedMovieId.value = 0
+  selectedOrder.value = slides.value.length + 1
   showModal.value = true
 }
 
@@ -102,6 +123,7 @@ onMounted(() => {
       </div>
       <button
         class="vs-btn vs-btn--primary"
+        type="button"
         :disabled="slides.length >= 5"
         @click="openAddModal"
         >
@@ -129,7 +151,7 @@ onMounted(() => {
       <!-- Slide list -->
       <div v-else class="hs-list">
         <div
-          v-for="(slide, i) in slides"
+          v-for="slide in slides"
           :key="slide.id"
           class="hs-item"
         >
@@ -188,7 +210,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Limit info -->
+      <!-- Footer -->
       <div class="hs-footer">
         <span class="hs-count">{{ slides.length }} / 5 slide terpakai</span>
         <div class="hs-dots-preview">
@@ -225,15 +247,17 @@ onMounted(() => {
               <!-- Pilih konten -->
               <div class="mv-field">
                 <label class="mv-label">Pilih Konten <span class="mv-label-required">*</span></label>
-                <select v-model.number="form.movie_id" class="vs-input hs-select">
-                    <option :value="null" disabled>— Pilih film / series / anime —</option>
-                    <option
-                        v-for="c in availableContent()"
-                        :key="c.id"
-                        :value="c.id"
-                    >
-                        [{{ c.type.toUpperCase() }}] {{ c.title }} ({{ c.year }})
-                    </option>
+                <select
+                  class="vs-input hs-select"
+                  @change="onSelectChange"
+                >
+                  <option disabled selected>— Pilih film / series / anime —</option>
+                  <option
+                    v-for="c in availableContent()"
+                    :key="c.id"
+                  >
+                    [{{ c.type.toUpperCase() }}] {{ c.title }} ({{ c.year }})
+                  </option>
                 </select>
                 <p v-if="availableContent().length === 0" class="mv-field-hint" style="color:var(--warning)">
                   Semua konten sudah dipakai sebagai slide.
@@ -241,25 +265,21 @@ onMounted(() => {
               </div>
 
               <!-- Preview konten terpilih -->
-              <div v-if="form.movie_id" class="hs-modal-preview">
-                <template v-for="c in allContent" :key="c.id">
-                  <div v-if="c.id === Number(form.movie_id)" class="mv-preview-box">
-                    <img :src="c.poster" class="mv-preview-poster" :alt="c.title" />
-                    <div class="mv-preview-info">
-                      <h4 class="mv-preview-title">{{ c.title }}</h4>
-                      <div class="mv-preview-meta">
-                        ★ {{ c.rating }} · {{ c.year }} · {{ c.genre }}
-                      </div>
-                    </div>
+              <div v-if="selectedMovieId && selectedPreview()" class="mv-preview-box">
+                <img :src="selectedPreview().poster" class="mv-preview-poster" :alt="selectedPreview().title" />
+                <div class="mv-preview-info">
+                  <h4 class="mv-preview-title">{{ selectedPreview().title }}</h4>
+                  <div class="mv-preview-meta">
+                    ★ {{ selectedPreview().rating }} · {{ selectedPreview().year }} · {{ selectedPreview().genre }}
                   </div>
-                </template>
+                </div>
               </div>
 
               <!-- Order -->
               <div class="mv-field">
                 <label class="mv-label">Urutan Tampil</label>
                 <input
-                  v-model.number="form.order"
+                  v-model.number="selectedOrder"
                   type="number"
                   min="1"
                   max="5"
@@ -272,7 +292,8 @@ onMounted(() => {
                 <button class="vs-btn vs-btn--ghost" @click="showModal = false">Batal</button>
                 <button
                   class="vs-btn vs-btn--primary"
-                  @click="() => { console.log('form:', form.movie_id, form); addSlide() }"
+                  :disabled="!selectedMovieId"
+                  @click="addSlide"
                 >
                   Tambah Slide
                 </button>
