@@ -4,8 +4,10 @@ package main
 import (
 	"log/slog"
 	"os"
+	"vstream-backend/config"
 	"vstream-backend/database"
 	"vstream-backend/jobs"
+	"vstream-backend/middleware"
 	"vstream-backend/router"
 
 	"github.com/gin-gonic/gin"
@@ -18,11 +20,16 @@ func init() {
 	slog.SetDefault(logger)
 }
 
+// main.go — ganti corsMiddleware() menjadi:
 func corsMiddleware() gin.HandlerFunc {
+	allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:5173" // fallback development
+		slog.Warn("ALLOWED_ORIGIN tidak diset, fallback ke localhost:5173")
+	}
+
 	return func(c *gin.Context) {
-		// Ganti * dengan origin frontend spesifik saat production
-		// contoh: "http://localhost:5173" atau "https://yourdomain.com"
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
@@ -35,18 +42,19 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
 func main() {
 	if err := godotenv.Load(); err != nil {
 		slog.Warn("File .env tidak ditemukan, menggunakan environment OS")
 	}
 
+	config.Validate()
 	database.InitDB()
 	jobs.Start()
 
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware())
+	r.Use(middleware.BodyLimit(10 << 20))
 
 	router.Setup(r)
 

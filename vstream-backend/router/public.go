@@ -11,7 +11,7 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 	// ── Auth ──────────────────────────────────────────────────
 	auth := api.Group("/auth")
 	{
-		auth.POST("/login", handlers.Login)
+		auth.POST("/login", middleware.LoginLimiter(), handlers.Login)
 		auth.POST("/logout", handlers.Logout)
 		auth.GET("/me", middleware.RequireAdmin, handlers.Me)
 	}
@@ -35,6 +35,6 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 	api.GET("/watch/:type/:tmdb_id", handlers.GetWatchData)
 
 	// ── Playback error logging ─────────────────────────────────
-	api.POST("/logs/playback-error", handlers.ReportPlaybackError)
+	api.POST("/logs/playback-error", middleware.PlaybackLogLimiter(), handlers.ReportPlaybackError)
 
 }
