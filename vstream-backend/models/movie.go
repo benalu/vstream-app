@@ -11,8 +11,8 @@ type Movie struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"deleted_at"   gorm:"index"`
-	TmdbID      string         `json:"tmdb_id"`
-	Type        string         `json:"type"         gorm:"not null;default:'movie'"`
+	TmdbID      string         `json:"tmdb_id"      gorm:"index"`
+	Type        string         `json:"type"         gorm:"not null;default:'movie';index"`
 	HasEpisodes bool           `json:"has_episodes" gorm:"default:false"`
 	Title       string         `json:"title"`
 	Year        string         `json:"year"`

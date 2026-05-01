@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"vstream-backend/database"
+	"vstream-backend/jobs"
 	"vstream-backend/router"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,7 @@ func main() {
 	}
 
 	database.InitDB()
+	jobs.Start()
 
 	r := gin.New()
 	r.Use(gin.Recovery())

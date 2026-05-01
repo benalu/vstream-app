@@ -11,8 +11,8 @@ type Season struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-	MovieID   uint           `json:"movie_id"   gorm:"not null;index"`
-	SeasonNum int            `json:"season_num" gorm:"not null"`
+	MovieID   uint           `json:"movie_id"   gorm:"not null;index;uniqueIndex:idx_movie_season"`
+	SeasonNum int            `json:"season_num" gorm:"not null;uniqueIndex:idx_movie_season"`
 	Episodes  []Episode      `json:"episodes"   gorm:"foreignKey:SeasonID"`
 }
 

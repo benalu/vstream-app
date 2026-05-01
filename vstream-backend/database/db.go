@@ -15,8 +15,8 @@ import (
 var DB *gorm.DB
 
 func InitDB() {
-	dir := "data"
-	dbPath := filepath.Join(dir, "movies.db")
+	dir := filepath.Join("data", "db")
+	dbPath := filepath.Join(dir, "vstream.db")
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		_ = os.MkdirAll(dir, 0755)
@@ -29,7 +29,8 @@ func InitDB() {
 	}
 
 	sqlDB, _ := db.DB()
-	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	db.Exec("PRAGMA journal_mode=WAL;")

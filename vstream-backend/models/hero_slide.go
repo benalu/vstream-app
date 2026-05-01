@@ -12,6 +12,6 @@ type HeroSlide struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 	MovieID   uint           `json:"movie_id"   gorm:"not null;uniqueIndex"`
-	SortOrder int            `json:"order"      gorm:"column:sort_order;not null;default:0"`
+	SortOrder int            `json:"order"      gorm:"column:sort_order;not null;default:0;index"`
 	Movie     Movie          `json:"movie"      gorm:"foreignKey:MovieID"`
 }

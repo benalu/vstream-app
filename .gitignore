@@ -60,3 +60,6 @@ Desktop.ini
 
 # Optional: ignore tmux / session files
 *.session
+
+.env.production
+.env.local

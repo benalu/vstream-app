@@ -12,5 +12,5 @@ type PlaybackLog struct {
 	URL        string    `json:"url"`
 	ErrorType  string    `json:"error_type"` // "load_error" | "stalled" | "manual"
 	UserAgent  string    `json:"user_agent"`
-	ReportedAt time.Time `json:"reported_at"`
+	ReportedAt time.Time `json:"reported_at" gorm:"index"`
 }
