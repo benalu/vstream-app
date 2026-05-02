@@ -16,15 +16,17 @@ func setupPublicRoutes(api *gin.RouterGroup) {
 		auth.GET("/me", middleware.RequireAdmin, handlers.Me)
 	}
 
+	cache60 := middleware.PublicCache(60)
+
 	// ── Aggregated endpoints ───────────────────────────────────
-	api.GET("/featured", handlers.GetFeatured)      // hero section
-	api.GET("/hero-slides", handlers.GetHeroSlides) // hero slider
-	api.GET("/top10", handlers.GetTop10)            // TOP 10 row
+	api.GET("/featured", handlers.GetFeatured)               // hero section
+	api.GET("/hero-slides", cache60, handlers.GetHeroSlides) // hero slider
+	api.GET("/top10", cache60, handlers.GetTop10)            // TOP 10 row
 
 	// ── Public listings ───────────────────────────────────────
-	api.GET("/movies", handlers.GetMoviesPublicList) // ?limit=&offset=
-	api.GET("/series", handlers.GetSeriesPublicList)
-	api.GET("/anime", handlers.GetAnimePublicList)
+	api.GET("/movies", cache60, handlers.GetMoviesPublicList) // ?limit=&offset=
+	api.GET("/series", cache60, handlers.GetSeriesPublicList)
+	api.GET("/anime", cache60, handlers.GetAnimePublicList)
 
 	// ── Public single content (by tmdb_id) ────────────────────
 	api.GET("/movies/:id", handlers.GetMoviePublic)

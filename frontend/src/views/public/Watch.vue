@@ -1,15 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import TheNavbar from '@/components/public/TheNavbar.vue'
 
 const route  = useRoute()
 const router = useRouter()
 
-// ── State ─────────────────────────────────────────────────────
 const info       = ref(null)
 const seasons    = ref([])
-const subtitles  = ref([]) 
+const subtitles  = ref([])
 const loading    = ref(true)
 const error      = ref(null)
 
@@ -18,9 +16,8 @@ const activeSeason  = ref(1)
 const activeEpisode = ref(null)
 const hasError      = ref(false)
 
-// ── Fetch ──────────────────────────────────────────────────────
 const reportError = async (errorType = 'load_error') => {
-  hasError.value = true  // tampilkan tombol lapor
+  hasError.value = true
   if (!info.value?.id) return
   try {
     const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
@@ -48,11 +45,10 @@ const fetchWatch = async () => {
     const data = await res.json()
     if (!data.success) throw new Error(data.error)
 
-    info.value    = data.data.info
-    seasons.value = data.data.seasons ?? []
+    info.value      = data.data.info
+    seasons.value   = data.data.seasons ?? []
     subtitles.value = data.data.subtitles ?? []
 
-    // Default: pilih episode pertama season pertama
     if (seasons.value.length > 0 && seasons.value[0].episodes?.length > 0) {
       activeSeason.value  = seasons.value[0].season_num
       activeEpisode.value = seasons.value[0].episodes[0]
@@ -67,7 +63,6 @@ const fetchWatch = async () => {
 onMounted(fetchWatch)
 watch(() => route.params, fetchWatch)
 
-// ── Computed ───────────────────────────────────────────────────
 const hasEpisodes = computed(() =>
   info.value?.type === 'series' ||
   (info.value?.type === 'anime' && info.value?.has_episodes)
@@ -101,17 +96,15 @@ const currentUrl = computed(() => {
 const selectEpisode = (ep) => {
   activeEpisode.value = ep
   activeServer.value  = 1
-  hasError.value      = false  // reset error saat ganti episode
+  hasError.value      = false
   document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-watch(activeServer, () => {
-  hasError.value = false  // reset error saat ganti server
-})
+watch(activeServer, () => { hasError.value = false })
 
 const isDirectVideo = computed(() => {
   if (!currentUrl.value) return false
-  const url = currentUrl.value.toLowerCase().split('?')[0] // strip query params dulu
+  const url = currentUrl.value.toLowerCase().split('?')[0]
   return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/.test(url)
 })
 
@@ -120,8 +113,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 
 <template>
   <div class="wp-root">
-    <TheNavbar />
-
     <!-- Loading -->
     <div v-if="loading" class="wp-loading">
       <div class="wp-spinner" />
@@ -141,8 +132,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 
     <!-- Main -->
     <div v-else-if="info" class="wp-page">
-
-      <!-- ── Breadcrumb ─────────────────────────────────── -->
       <div class="wp-breadcrumb">
         <button class="wp-bc-btn" @click="router.push('/')">Home</button>
         <span class="wp-bc-sep">›</span>
@@ -152,9 +141,8 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           S{{ activeSeason }}E{{ activeEpisode.ep_num }}
         </span>
       </div>
-      <!-- ── Player wrap ────────────────────────────────── -->
+
       <div class="wp-player-wrap">
-        <!-- Video langsung (mp4, mkv, webm, dll) -->
         <video
           v-if="currentUrl && isDirectVideo"
           :key="'video-' + currentUrl"
@@ -167,19 +155,18 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           @error="reportError('load_error')"
           @stalled="reportError('stalled')"
         >
-        <track
-          v-for="sub in subtitles"
-          :key="sub.lang"
-          :src="sub.url"
-          :srclang="sub.lang"
-          :label="sub.label"
-          kind="subtitles"
-          :default="sub.lang === 'id'"
-        />
+          <track
+            v-for="sub in subtitles"
+            :key="sub.lang"
+            :src="sub.url"
+            :srclang="sub.lang"
+            :label="sub.label"
+            kind="subtitles"
+            :default="sub.lang === 'id'"
+          />
           Browser Anda tidak mendukung pemutaran video.
         </video>
 
-        <!-- Embed player (iframe dari layanan streaming) -->
         <iframe
           v-else-if="currentUrl && !isDirectVideo"
           :key="'iframe-' + currentUrl"
@@ -199,7 +186,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </div>
       </div>
 
-      <!-- ── Report bar ─────────────────────────────────── -->
       <div v-if="hasError" class="wp-report-bar">
         <span class="wp-report-label">Video tidak bisa diputar?</span>
         <button class="wp-report-btn" @click="reportError('manual')">
@@ -207,9 +193,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </button>
       </div>
 
-      <!-- ── Server selector ───────────────────────────── -->
       <div class="wp-meta-bar">
-        <!-- Kiri: info singkat -->
         <div class="wp-meta-left">
           <span class="wp-type-badge" :class="`wp-type-badge--${info.type}`">
             {{ TYPE_LABEL[info.type] }}
@@ -228,7 +212,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </span>
         </div>
 
-        <!-- Kanan: server buttons -->
         <div v-if="availableServers.length > 0" class="wp-servers">
           <span class="wp-servers-label">Server:</span>
           <button
@@ -243,7 +226,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </div>
       </div>
 
-      <!-- ── Info section ───────────────────────────────── -->
       <div class="wp-info">
         <h1 class="wp-title">{{ info.title }}</h1>
         <p v-if="info.overview" class="wp-overview">{{ info.overview }}</p>
@@ -254,10 +236,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </div>
       </div>
 
-      <!-- ── Episode list (series/anime) ───────────────── -->
       <div v-if="hasEpisodes && seasons.length > 0" class="wp-episodes">
-
-        <!-- Section header + season tabs -->
         <div class="wp-ep-header">
           <div class="wp-ep-header-left">
             <div class="wp-ep-bar" />
@@ -276,7 +255,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </div>
         </div>
 
-        <!-- Episode grid -->
         <div class="wp-ep-grid">
           <button
             v-for="ep in currentSeason?.episodes ?? []"
@@ -285,7 +263,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
             :class="{ 'wp-ep-card--active': activeEpisode?.id === ep.id }"
             @click="selectEpisode(ep)"
           >
-            <!-- Play indicator -->
             <div class="wp-ep-card-num">
               <svg v-if="activeEpisode?.id === ep.id"
                 width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -300,7 +277,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </button>
         </div>
       </div>
-
     </div>
   </div>
 </template>
@@ -315,7 +291,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* ── Loading / Error ─────────────────────────────────── */
 .wp-loading, .wp-error {
   display: flex;
   flex-direction: column;
@@ -350,25 +325,16 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   gap: 10px;
   padding: 6px 0;
 }
-.wp-report-label {
-  font-size: 11.5px;
-  color: #475569;
-}
+.wp-report-label { font-size: 11.5px; color: #475569; }
 .wp-report-btn {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #ef4444;
+  font-size: 11.5px; font-weight: 600; color: #ef4444;
   background: rgba(239,68,68,0.08);
   border: 1px solid rgba(239,68,68,0.2);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s;
+  border-radius: 6px; padding: 4px 10px;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
 .wp-report-btn:hover { background: rgba(239,68,68,0.15); }
 
-/* ── Page wrapper ────────────────────────────────────── */
 .wp-page {
   padding-top: 70px;
   max-width: 1100px;
@@ -378,18 +344,13 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   padding-bottom: 60px;
 }
 
-/* ── Breadcrumb ──────────────────────────────────────── */
 .wp-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 20px 0 14px;
-  font-size: 12.5px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 20px 0 14px; font-size: 12.5px;
 }
 .wp-bc-btn {
-  background: none; border: none;
-  color: #6366f1; cursor: pointer;
-  font-size: 12.5px; font-family: inherit; padding: 0;
+  background: none; border: none; color: #6366f1;
+  cursor: pointer; font-size: 12.5px; font-family: inherit; padding: 0;
   transition: color 0.15s;
 }
 .wp-bc-btn:hover { color: #818cf8; }
@@ -400,22 +361,16 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   max-width: 280px;
 }
 
-/* ── Player ──────────────────────────────────────────── */
 .wp-player-wrap {
-  width: 100%;
-  aspect-ratio: 16/9;
-  background: #000;
-  border-radius: 14px;
+  width: 100%; aspect-ratio: 16/9;
+  background: #000; border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   margin-bottom: 0;
 }
 .wp-video {
-  width: 100%;
-  height: 100%;
-  display: block;
-  background: #000;
-  outline: none;
+  width: 100%; height: 100%; display: block;
+  background: #000; outline: none;
 }
 .wp-no-url {
   width: 100%; height: 100%;
@@ -424,23 +379,13 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   gap: 12px; color: #334155; font-size: 13px;
 }
 
-/* ── Meta bar (below player) ─────────────────────────── */
 .wp-meta-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 0;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 14px 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  margin-bottom: 20px; flex-wrap: wrap;
 }
-.wp-meta-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+.wp-meta-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wp-type-badge {
   font-size: 9px; font-weight: 700;
   padding: 2px 8px; border-radius: 4px;
@@ -449,9 +394,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 .wp-type-badge--movie  { background: rgba(99,102,241,0.85); }
 .wp-type-badge--series { background: rgba(6,182,212,0.85);  }
 .wp-type-badge--anime  { background: rgba(244,63,94,0.85);  }
-.wp-year, .wp-duration {
-  font-size: 12.5px; color: #64748b; font-weight: 500;
-}
+.wp-year, .wp-duration { font-size: 12.5px; color: #64748b; font-weight: 500; }
 .wp-rating {
   display: flex; align-items: center; gap: 4px;
   font-size: 12.5px; font-weight: 700; color: #f59e0b;
@@ -462,32 +405,21 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   border: 1px solid rgba(99,102,241,0.2);
   padding: 2px 9px; border-radius: 20px;
 }
-
-/* Server buttons */
-.wp-servers {
-  display: flex; align-items: center; gap: 6px;
-}
-.wp-servers-label {
-  font-size: 11.5px; color: #64748b; font-weight: 500;
-}
+.wp-servers { display: flex; align-items: center; gap: 6px; }
+.wp-servers-label { font-size: 11.5px; color: #64748b; font-weight: 500; }
 .wp-server-btn {
-  width: 32px; height: 32px;
-  border-radius: 7px;
+  width: 32px; height: 32px; border-radius: 7px;
   border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.04);
-  color: #64748b;
+  background: rgba(255,255,255,0.04); color: #64748b;
   font-size: 12px; font-weight: 700;
-  cursor: pointer; font-family: inherit;
-  transition: all 0.15s;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
 .wp-server-btn:hover { color: #fff; border-color: rgba(255,255,255,0.15); }
 .wp-server-btn--active {
-  background: #6366f1;
-  border-color: transparent; color: #fff;
+  background: #6366f1; border-color: transparent; color: #fff;
   box-shadow: 0 0 14px rgba(99,102,241,0.4);
 }
 
-/* ── Info ────────────────────────────────────────────── */
 .wp-info { margin-bottom: 40px; }
 .wp-title {
   font-family: 'Bebas Neue', sans-serif;
@@ -496,9 +428,8 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   line-height: 1; margin-bottom: 12px;
 }
 .wp-overview {
-  font-size: 13.5px; line-height: 1.7;
-  color: #94a3b8; margin-bottom: 14px;
-  max-width: 720px;
+  font-size: 13.5px; line-height: 1.7; color: #94a3b8;
+  margin-bottom: 14px; max-width: 720px;
 }
 .wp-genres { display: flex; gap: 8px; flex-wrap: wrap; }
 .wp-genre-pill {
@@ -508,103 +439,68 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-/* ── Episodes ────────────────────────────────────────── */
 .wp-episodes { margin-top: 8px; }
-
 .wp-ep-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  gap: 16px;
-  flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; gap: 16px; flex-wrap: wrap;
 }
-.wp-ep-header-left {
-  display: flex; align-items: center; gap: 10px;
-}
+.wp-ep-header-left { display: flex; align-items: center; gap: 10px; }
 .wp-ep-bar {
   width: 4px; height: 20px; border-radius: 2px;
-  background: #6366f1;
-  box-shadow: 0 0 10px rgba(99,102,241,0.6);
-  flex-shrink: 0;
+  background: #6366f1; box-shadow: 0 0 10px rgba(99,102,241,0.6); flex-shrink: 0;
 }
-.wp-ep-title {
-  font-size: 17px; font-weight: 700; color: #fff;
-}
+.wp-ep-title { font-size: 17px; font-weight: 700; color: #fff; }
 
-/* Season tabs */
 .wp-season-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .wp-season-tab {
   padding: 5px 14px; border-radius: 20px;
   border: 1px solid rgba(255,255,255,0.08);
   background: transparent; color: #64748b;
   font-size: 12.5px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  transition: all 0.15s;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
 .wp-season-tab:hover { color: #fff; }
 .wp-season-tab--active {
   background: rgba(99,102,241,0.15);
-  border-color: rgba(99,102,241,0.4);
-  color: #818cf8;
+  border-color: rgba(99,102,241,0.4); color: #818cf8;
 }
 
-/* Episode grid */
 .wp-ep-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
 }
 .wp-ep-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.02);
-  color: #64748b;
-  cursor: pointer; text-align: left;
-  font-family: inherit;
-  transition: all 0.15s;
+  background: rgba(255,255,255,0.02); color: #64748b;
+  cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s;
 }
 .wp-ep-card:hover {
   background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.12);
-  color: #fff;
+  border-color: rgba(255,255,255,0.12); color: #fff;
   transform: translateY(-2px);
 }
 .wp-ep-card--active {
   background: rgba(99,102,241,0.1);
-  border-color: rgba(99,102,241,0.3);
-  color: #fff;
+  border-color: rgba(99,102,241,0.3); color: #fff;
 }
 .wp-ep-card-num {
-  width: 30px; height: 30px;
-  border-radius: 7px;
+  width: 30px; height: 30px; border-radius: 7px;
   background: rgba(255,255,255,0.06);
   display: grid; place-items: center;
-  font-size: 12px; font-weight: 700;
-  flex-shrink: 0; color: #94a3b8;
+  font-size: 12px; font-weight: 700; flex-shrink: 0; color: #94a3b8;
 }
-.wp-ep-card--active .wp-ep-card-num {
-  background: rgba(99,102,241,0.25);
-  color: #818cf8;
-}
-.wp-ep-card-info {
-  display: flex; flex-direction: column; gap: 2px;
-  min-width: 0;
-}
-.wp-ep-card-label {
-  font-size: 11px; font-weight: 600; color: #64748b;
-}
+.wp-ep-card--active .wp-ep-card-num { background: rgba(99,102,241,0.25); color: #818cf8; }
+.wp-ep-card-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wp-ep-card-label { font-size: 11px; font-weight: 600; color: #64748b; }
 .wp-ep-card--active .wp-ep-card-label { color: #818cf8; }
 .wp-ep-card-title {
   font-size: 12px; font-weight: 500; color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 640px) {
   .wp-page { padding-left: 16px; padding-right: 16px; }
   .wp-ep-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }

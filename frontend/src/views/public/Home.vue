@@ -1,15 +1,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import TheNavbar      from '@/components/public/TheNavbar.vue'
 import HeroSection    from '@/components/public/HeroSection.vue'
 import CategoryFilter from '@/components/public/CategoryFilter.vue'
 import Top10Row       from '@/components/public/Top10Row.vue'
 import ContentGrid    from '@/components/public/ContentGrid.vue'
-import TheFooter      from '@/components/public/TheFooter.vue'
 import { useContent } from '@/composables/useContent'
 
-// ── Data ─────────────────────────────────────────────────────
 const {
   heroSlides,
   featured,
@@ -23,7 +20,6 @@ const {
 
 onMounted(fetchAll)
 
-// ── Category filter ───────────────────────────────────────────
 const CATEGORIES = [
   { id: 'all',    label: 'Semua'  },
   { id: 'movie',  label: 'Movies' },
@@ -41,7 +37,6 @@ const sectionTitle = computed(() => ({
   all: 'Baru Ditambahkan', movie: 'Movies', series: 'Series', anime: 'Anime',
 }[activeCategory.value]))
 
-// ── Handlers ──────────────────────────────────────────────────
 const router = useRouter()
 
 const goWatch = (item) => {
@@ -56,8 +51,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
 
 <template>
   <div class="home">
-    <TheNavbar />
-
     <!-- Hero: loading -->
     <div v-if="loadingFeatured" class="home__hero-skeleton" />
 
@@ -77,7 +70,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
     </div>
 
     <main class="home__main">
-      <!-- Error banner -->
       <div v-if="error" class="home__error">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
@@ -87,10 +79,8 @@ const handleMoreClick = ()     => console.log('lihat semua')
         Gagal memuat sebagian konten. Periksa koneksi dan coba lagi.
       </div>
 
-      <!-- Category filter -->
       <CategoryFilter v-model="activeCategory" :categories="CATEGORIES" />
 
-      <!-- TOP 10 -->
       <section class="home__section">
         <div class="home__section-header">
           <div class="home__section-bar" />
@@ -108,7 +98,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
         <p v-else class="home__empty-text">Belum ada konten.</p>
       </section>
 
-      <!-- Recently added / filtered -->
       <ContentGrid
         :title="sectionTitle"
         :items="filteredRecent"
@@ -117,8 +106,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
         @moreClick="handleMoreClick"
       />
     </main>
-
-    <TheFooter />
   </div>
 </template>
 
@@ -144,7 +131,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* Hero states */
 .home__hero-skeleton {
   height: 100svh;
   min-height: 600px;
@@ -163,7 +149,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
 }
 .home__hero-empty a { color: var(--pub-accent-hi); }
 
-/* Error */
 .home__error {
   display: flex;
   align-items: center;
@@ -176,7 +161,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
   font-size: 12.5px;
 }
 
-/* Main layout */
 .home__main {
   padding: 40px 48px 60px;
   margin: 0 auto;
@@ -185,7 +169,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
   gap: 52px;
 }
 
-/* Section header (TOP 10) */
 .home__section-header {
   display: flex;
   align-items: center;
@@ -204,7 +187,6 @@ const handleMoreClick = ()     => console.log('lihat semua')
   color: #fff; letter-spacing: -0.01em;
 }
 
-/* TOP 10 skeleton */
 .home__top10-skeleton {
   display: flex;
   gap: 8px;
