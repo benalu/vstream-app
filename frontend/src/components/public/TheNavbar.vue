@@ -19,7 +19,7 @@ const { scrolled } = useScrolled(60)
 
     <!-- Links -->
     <div class="vs-nav__links">
-      <a href="#" class="vs-nav__link vs-nav__link--active">Home</a>
+      <router-link to="/" class="vs-nav__link" active-class="vs-nav__link--active" exact>Home</router-link>
       <a href="#" class="vs-nav__link">Movies</a>
       <a href="#" class="vs-nav__link">Series</a>
       <a href="#" class="vs-nav__link">Anime</a>
