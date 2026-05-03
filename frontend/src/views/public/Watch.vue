@@ -1,53 +1,192 @@
 <script setup>
-import { onMounted, onBeforeUnmount, watch, watchEffect, computed, ref } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue'
+import Plyr from 'plyr'
+import 'plyr/dist/plyr.css'
 import { useRoute, useRouter } from 'vue-router'
-
-import { useWatchData }        from '@/composables/useWatchData'
-import { useSubtitleSettings } from '@/composables/useSubtitleSettings'
-import { useProgress }         from '@/composables/useProgress'
-import { useSkipIntro }        from '@/composables/useSkipIntro'
-import { usePlayer }           from '@/composables/usePlayer'
-
-import WatchPlayer   from '@/components/public/watch/WatchPlayer.vue'
-import WatchMeta     from '@/components/public/watch/WatchMeta.vue'
-import WatchInfo     from '@/components/public/watch/WatchInfo.vue'
-import WatchEpisodes from '@/components/public/watch/WatchEpisodes.vue'
 
 const route  = useRoute()
 const router = useRouter()
 
-// ── Data ──────────────────────────────────────────────────────
-const { info, seasons, subtitles, loading, error, hasEpisodes, currentSeason, fetchWatch } = useWatchData()
+// ── State ─────────────────────────────────────────────────────
+const info       = ref(null)
+const seasons    = ref([])
+const subtitles  = ref([])
+const loading    = ref(true)
+const error      = ref(null)
 
-// ── UI State ──────────────────────────────────────────────────
+const videoRef     = ref(null)
+const plyrInstance = ref(null)
+
 const activeServer  = ref(1)
 const activeSeason  = ref(1)
 const activeEpisode = ref(null)
 const hasError      = ref(false)
 
-// ── Subtitle ──────────────────────────────────────────────────
-const { subtitleSize, subtitleColor, subtitleStyle, increaseSubtitle, decreaseSubtitle } = useSubtitleSettings()
+// ── Subtitle Size ─────────────────────────────────────────────
+const subtitleSize = ref(
+  Number(localStorage.getItem('vstream_sub_size')) || 25
+)
 
-// ── Player ────────────────────────────────────────────────────
-const { videoRef, plyrInstance, initPlyr, destroyPlayer } = usePlayer({
-  subtitleSize, subtitleColor, increaseSubtitle, decreaseSubtitle,
-  restoreProgress: () => progress.restoreProgress(),
-  saveProgress:    () => progress.saveProgress(),
-  clearProgress:   () => progress.clearProgress(),
-  checkSkipIntro:  (hasEp) => skipIntro.checkSkipIntro(hasEp),
-  hasEpisodes,
-  reportError,
+watch(subtitleSize, (val) => {
+  localStorage.setItem('vstream_sub_size', val)
 })
 
-// ── Progress ──────────────────────────────────────────────────
-const progress = useProgress(info, plyrInstance)
-const { showResumePrompt, resumeFormatted, resume, startOver } = progress
+const subtitleSizeStyle = computed(() => ({
+  '--subtitle-size': `${subtitleSize.value}px`,
+}))
+
+const increaseSubtitle = () => { if (subtitleSize.value < 150) subtitleSize.value += 2 }
+const decreaseSubtitle = () => { if (subtitleSize.value > 10) subtitleSize.value -= 2 }
+
+// ── Subtitle Color ────────────────────────────────────────────
+const SUBTITLE_COLORS = [
+  { label: 'Putih',   value: '#ffffff' },
+  { label: 'Kuning',  value: '#facc15' },
+  { label: 'Hijau',   value: '#4ade80' },
+  { label: 'Cyan',    value: '#22d3ee' },
+  { label: 'Merah',   value: '#f87171' },
+]
+
+const subtitleColor = ref(
+  localStorage.getItem('vstream_sub_color') || '#ffffff'
+)
+
+watch(subtitleColor, (val) => {
+  localStorage.setItem('vstream_sub_color', val)
+})
+
+const subtitleStyle = computed(() => ({
+  '--subtitle-size':  `${subtitleSize.value}px`,
+  '--subtitle-color': subtitleColor.value,
+}))
+
+// ── Resume Progress ───────────────────────────────────────────
+const showResumePrompt = ref(false)
+const resumeTime       = ref(0)
+
+const storageKey = computed(() =>
+  info.value ? `vstream_progress_${info.value.id}` : null
+)
+
+const saveProgress = () => {
+  if (!plyrInstance.value || !storageKey.value) return
+  const t = plyrInstance.value.currentTime
+  const d = plyrInstance.value.duration
+  if (t < 5 || !d) return
+  if (t / d > 0.95) {
+    localStorage.removeItem(storageKey.value)
+    return
+  }
+  localStorage.setItem(storageKey.value, JSON.stringify({
+    time:     t,
+    duration: d,
+    saved_at: Date.now(),
+  }))
+}
+
+const restoreProgress = () => {
+  if (!storageKey.value) return
+  const raw = localStorage.getItem(storageKey.value)
+  if (!raw) return
+  try {
+    const { time, duration, saved_at } = JSON.parse(raw)
+    const expired  = Date.now() - saved_at > 30 * 24 * 60 * 60 * 1000
+    const finished = duration && (time / duration) > 0.95
+    if (expired || finished || time < 5) return
+    resumeTime.value       = time
+    showResumePrompt.value = true
+  } catch {
+    localStorage.removeItem(storageKey.value)
+  }
+}
+
+const resume = () => {
+  if (plyrInstance.value) {
+    plyrInstance.value.currentTime = resumeTime.value
+    plyrInstance.value.play()
+  }
+  showResumePrompt.value = false
+}
+
+const startOver = () => {
+  showResumePrompt.value = false
+  resumeTime.value = 0
+}
 
 // ── Skip Intro ────────────────────────────────────────────────
-const skipIntro = useSkipIntro(plyrInstance)
-const { showSkipIntro } = skipIntro
+const showSkipIntro  = ref(false)
+const INTRO_START    = 30
+const INTRO_END      = 90
 
-// ── Servers & URL ─────────────────────────────────────────────
+const skipIntro = () => {
+  if (plyrInstance.value) plyrInstance.value.currentTime = INTRO_END
+  showSkipIntro.value = false
+}
+
+// ── Report Error ──────────────────────────────────────────────
+const reportError = async (errorType = 'load_error') => {
+  hasError.value = true
+  if (!info.value?.id) return
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+    await fetch(`${base}/logs/playback-error`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        movie_id:   info.value.id,
+        server:     `url${activeServer.value}`,
+        error_type: errorType,
+      }),
+    })
+  } catch { /* silent */ }
+}
+
+// ── Fetch ─────────────────────────────────────────────────────
+const fetchWatch = async () => {
+  loading.value = true
+  error.value   = null
+  showResumePrompt.value = false
+
+  if (plyrInstance.value) {
+    plyrInstance.value.destroy()
+    plyrInstance.value = null
+  }
+
+  try {
+    const { type, tmdbId } = route.params
+    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+    const res  = await fetch(`${base}/watch/${type}/${tmdbId}`)
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error)
+
+    info.value      = data.data.info
+    seasons.value   = data.data.seasons ?? []
+    subtitles.value = data.data.subtitles ?? []
+
+    if (seasons.value.length > 0 && seasons.value[0].episodes?.length > 0) {
+      activeSeason.value  = seasons.value[0].season_num
+      activeEpisode.value = seasons.value[0].episodes[0]
+    }
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchWatch)
+watch(() => route.params, fetchWatch)
+
+// ── Computed ──────────────────────────────────────────────────
+const hasEpisodes = computed(() =>
+  info.value?.type === 'series' ||
+  (info.value?.type === 'anime' && info.value?.has_episodes)
+)
+
+const currentSeason = computed(() =>
+  seasons.value.find(s => s.season_num === activeSeason.value)
+)
+
 const availableServers = computed(() => {
   if (hasEpisodes.value && activeEpisode.value) {
     return [
@@ -65,64 +204,218 @@ const availableServers = computed(() => {
 
 const currentUrl = computed(() => {
   const servers = availableServers.value
-  return servers.find(s => s.n === activeServer.value)?.url ?? servers[0]?.url ?? ''
+  const found   = servers.find(s => s.n === activeServer.value)
+  return found?.url ?? servers[0]?.url ?? ''
 })
 
 const isDirectVideo = computed(() => {
   if (!currentUrl.value) return false
-  return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/i.test(currentUrl.value.split('?')[0])
+  const url = currentUrl.value.toLowerCase().split('?')[0]
+  return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/.test(url)
 })
 
-// ── Report Error ──────────────────────────────────────────────
-const reportError = async (errorType = 'load_error') => {
-  hasError.value = true
-  if (!info.value?.id) return
-  try {
-    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
-    await fetch(`${base}/logs/playback-error`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ movie_id: info.value.id, server: `url${activeServer.value}`, error_type: errorType }),
-    })
-  } catch { /* silent */ }
-}
+const resumeFormatted = computed(() => {
+  const m = Math.floor(resumeTime.value / 60)
+  const s = String(Math.floor(resumeTime.value % 60)).padStart(2, '0')
+  return `${m}:${s}`
+})
 
-// ── Fetch ─────────────────────────────────────────────────────
-const doFetch = async () => {
-  showResumePrompt.value = false
-  destroyPlayer()
-  await fetchWatch(route.params.type, route.params.tmdbId)
-  if (seasons.value.length > 0 && seasons.value[0].episodes?.length > 0) {
-    activeSeason.value  = seasons.value[0].season_num
-    activeEpisode.value = seasons.value[0].episodes[0]
+// ── MutationObserver for Plyr menu injection ──────────────────
+let _menuObserver = null
+
+const watchPlyrMenu = () => {
+  if (_menuObserver) {
+    _menuObserver.disconnect()
+    _menuObserver = null
   }
+
+  const container = plyrInstance.value?.elements?.container
+  if (!container) return
+
+  _menuObserver = new MutationObserver(() => {
+    // Cari panel captions/subtitle Plyr yang sudah ada
+    const captionsPanel = container.querySelector(
+      '[id$="-captions"]:not([hidden])'
+    )
+    if (
+      captionsPanel &&
+      !captionsPanel.querySelector('.plyr-subtitle-size-panel')
+    ) {
+      injectSubtitleSizeIntoPanel(captionsPanel)
+    }
+  })
+
+  _menuObserver.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] })
 }
 
-onMounted(doFetch)
-watch(() => route.params, doFetch)
+const injectSubtitleSizeIntoPanel = (captionsPanel) => {
+  const wrapper = document.createElement('div')
+  wrapper.className = 'plyr-subtitle-size-panel'
+  wrapper.innerHTML = `
+    <div class="plyr-sub-size-label">Ukuran Subtitle</div>
+    <div class="plyr-sub-size-row">
+      <button type="button" class="plyr-sub-size-btn" data-action="decrease">A−</button>
+      <span class="plyr-sub-size-display">${subtitleSize.value}px</span>
+      <button type="button" class="plyr-sub-size-btn" data-action="increase">A+</button>
+    </div>
+    <div class="plyr-sub-size-slider-wrap">
+      <span class="plyr-sub-size-min">10px</span>
+      <input type="range" class="plyr-sub-size-slider" min="10" max="150" step="2" value="${subtitleSize.value}" />
+      <span class="plyr-sub-size-max">150px</span>
+    </div>
+    <div class="plyr-sub-size-label" style="margin-top:4px">Warna Subtitle</div>
+    <div class="plyr-sub-color-row">
+      ${SUBTITLE_COLORS.map(c => `
+        <button
+          type="button"
+          class="plyr-sub-color-btn ${subtitleColor.value === c.value ? 'plyr-sub-color-btn--active' : ''}"
+          data-color="${c.value}"
+          title="${c.label}"
+          style="background:${c.value}"
+        ></button>
+      `).join('')}
+    </div>
+  `
 
-// ── Init player saat URL ready ────────────────────────────────
+  captionsPanel.appendChild(wrapper)
+
+  wrapper.querySelectorAll('.plyr-sub-size-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.action === 'increase') increaseSubtitle()
+      else decreaseSubtitle()
+      syncSubtitleSizeUI(wrapper)
+    })
+  })
+
+  const slider = wrapper.querySelector('.plyr-sub-size-slider')
+  slider.addEventListener('input', (e) => {
+    subtitleSize.value = Number(e.target.value)
+    syncSubtitleSizeUI(wrapper)
+  })
+
+  wrapper.querySelectorAll('.plyr-sub-color-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    subtitleColor.value = b.dataset.color
+    // Update active state
+    wrapper.querySelectorAll('.plyr-sub-color-btn').forEach(x =>
+      x.classList.toggle('plyr-sub-color-btn--active', x.dataset.color === b.dataset.color)
+    )
+  })
+})
+}
+
+const syncSubtitleSizeUI = (wrapper) => {
+  const display = wrapper?.querySelector('.plyr-sub-size-display')
+  if (display) display.textContent = `${subtitleSize.value}px`
+
+  const slider = wrapper?.querySelector('.plyr-sub-size-slider')
+  if (slider) slider.value = subtitleSize.value
+}
+
+// ── Plyr Init ─────────────────────────────────────────────────
+const initPlyr = async () => {
+  await nextTick()
+  if (!videoRef.value) return
+
+  if (plyrInstance.value) {
+    _menuObserver?.disconnect()
+    _menuObserver = null
+    plyrInstance.value.destroy()
+    plyrInstance.value = null
+  }
+
+  plyrInstance.value = new Plyr(videoRef.value, {
+    controls: [
+      'play-large', 'play', 'rewind', 'fast-forward',
+      'progress', 'current-time', 'duration',
+      'mute', 'volume', 'captions', 'settings',
+      'pip', 'fullscreen',
+    ],
+    settings:  ['captions', 'speed'],
+    captions:  { active: true, language: 'id', update: true },
+    speed:     { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+    keyboard:  { focused: true, global: true },
+    tooltips:  { controls: true, seek: true },
+    i18n: {
+      restart:          'Mulai Ulang',
+      rewind:           'Mundur {seektime}s',
+      play:             'Putar',
+      pause:            'Jeda',
+      fastForward:      'Maju {seektime}s',
+      seek:             'Cari',
+      seekLabel:        '{currentTime} dari {duration}',
+      played:           'Diputar',
+      buffered:         'Buffered',
+      currentTime:      'Waktu saat ini',
+      duration:         'Durasi',
+      volume:           'Volume',
+      mute:             'Bisukan',
+      unmute:           'Aktifkan suara',
+      enableCaptions:   'Aktifkan subtitle',
+      disableCaptions:  'Nonaktifkan subtitle',
+      enterFullscreen:  'Layar penuh',
+      exitFullscreen:   'Keluar layar penuh',
+      captions:         'Subtitle',
+      settings:         'Pengaturan',
+      pip:              'PiP',
+      menuBack:         'Kembali',
+      speed:            'Kecepatan',
+      normal:           'Normal',
+    },
+  })
+
+  plyrInstance.value.on('ready', () => {
+    if (plyrInstance.value?.captions) {
+      plyrInstance.value.captions.active = true
+    }
+    restoreProgress()
+    // Mulai observe Plyr container untuk inject menu subtitle size
+    watchPlyrMenu()
+  })
+
+  plyrInstance.value.on('timeupdate', () => {
+    saveProgress()
+
+    if (hasEpisodes.value) {
+      const t = plyrInstance.value?.currentTime ?? 0
+      showSkipIntro.value = t >= INTRO_START && t <= INTRO_END
+    }
+  })
+
+  plyrInstance.value.on('ended', () => {
+    showSkipIntro.value = false
+    if (storageKey.value) localStorage.removeItem(storageKey.value)
+  })
+
+  plyrInstance.value.on('error', () => reportError('load_error'))
+}
+
 watchEffect(async () => {
-  if (!videoRef.value || !currentUrl.value || !isDirectVideo.value) return
-  await initPlyr(subtitles.value)
+  const el  = videoRef.value
+  const url = currentUrl.value
+  const ok  = isDirectVideo.value
+  if (!el || !url || !ok) return
+  await initPlyr()
 })
 
-// ── Server change ─────────────────────────────────────────────
 watch(activeServer, () => {
-  destroyPlayer()
+  _menuObserver?.disconnect()
+  _menuObserver = null
   hasError.value         = false
   showResumePrompt.value = false
   showSkipIntro.value    = false
 })
 
-// ── Cleanup ───────────────────────────────────────────────────
 onBeforeUnmount(() => {
-  progress.saveProgress()
-  destroyPlayer()
+  _menuObserver?.disconnect()
+  _menuObserver = null
+  saveProgress()
+  plyrInstance.value?.destroy()
 })
 
 // ── Episode ───────────────────────────────────────────────────
 const selectEpisode = (ep) => {
-  progress.saveProgress()
+  saveProgress()
   activeEpisode.value    = ep
   activeServer.value     = 1
   hasError.value         = false
@@ -130,16 +423,20 @@ const selectEpisode = (ep) => {
   showSkipIntro.value    = false
   document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+
+const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 </script>
 
 <template>
   <div class="wp-root">
 
+    <!-- Loading -->
     <div v-if="loading" class="wp-loading">
       <div class="wp-spinner" />
       <p>Memuat konten...</p>
     </div>
 
+    <!-- Error -->
     <div v-else-if="error" class="wp-error">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="12" cy="12" r="10"/>
@@ -150,8 +447,10 @@ const selectEpisode = (ep) => {
       <button class="wp-back-btn" @click="router.back()">← Kembali</button>
     </div>
 
+    <!-- Main -->
     <div v-else-if="info" class="wp-page">
 
+      <!-- Breadcrumb -->
       <div class="wp-breadcrumb">
         <button class="wp-bc-btn" @click="router.push('/')">Home</button>
         <span class="wp-bc-sep">›</span>
@@ -162,44 +461,175 @@ const selectEpisode = (ep) => {
         </template>
       </div>
 
-      <WatchPlayer
-        :ref="el => videoRef = el?.$el ?? el"
-        :current-url="currentUrl"
-        :is-direct-video="isDirectVideo"
-        :subtitles="subtitles"
-        :subtitle-style="subtitleStyle"
-        :show-skip-intro="showSkipIntro"
-        :has-episodes="hasEpisodes"
-        :show-resume-prompt="showResumePrompt"
-        :resume-formatted="resumeFormatted"
-        @skipIntro="skipIntro.skipIntro()"
-        @resume="resume"
-        @startOver="startOver"
-      />
+      <!-- Player -->
+      <div class="wp-player-wrap" :style="subtitleStyle">
 
-      <WatchMeta
-        :info="info"
-        :has-episodes="hasEpisodes"
-        :active-episode="activeEpisode"
-        :active-season="activeSeason"
-        :available-servers="availableServers"
-        :active-server="activeServer"
-        :has-error="hasError"
-        @update:activeServer="activeServer = $event"
-        @reportError="reportError"
-      />
+        <!-- Direct video → Plyr -->
+        <template v-if="currentUrl && isDirectVideo">
+          <video
+            ref="videoRef"
+            :key="currentUrl"
+            :src="currentUrl"
+            class="wp-video"
+            preload="metadata"
+            playsinline
+          >
+            <track
+              v-for="sub in subtitles"
+              :key="sub.lang"
+              :src="sub.url"
+              :srclang="sub.lang"
+              :label="sub.label"
+              kind="subtitles"
+              :default="sub.lang === 'id'"
+            />
+          </video>
+        </template>
 
-      <WatchInfo :title="info.title" :overview="info.overview" :genre="info.genre" />
+        <!-- Iframe -->
+        <iframe
+          v-else-if="currentUrl && !isDirectVideo"
+          :key="'iframe-' + currentUrl"
+          :src="currentUrl"
+          class="wp-iframe"
+          allowfullscreen
+          allow="autoplay; fullscreen"
+          frameborder="0"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+        />
 
-      <WatchEpisodes
-        v-if="hasEpisodes"
-        :seasons="seasons"
-        :current-season="currentSeason(activeSeason)"
-        :active-season="activeSeason"
-        :active-episode="activeEpisode"
-        @update:activeSeason="activeSeason = $event"
-        @selectEpisode="selectEpisode"
-      />
+        <!-- No URL -->
+        <div v-else class="wp-no-url">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <polygon points="5 3 19 12 5 21 5 3" opacity=".3"/>
+          </svg>
+          <p>URL stream belum tersedia</p>
+        </div>
+
+        <!-- Skip Intro — hanya series/anime -->
+        <Transition name="wp-fade-slide">
+          <button
+            v-if="showSkipIntro && hasEpisodes"
+            class="wp-skip-intro"
+            @click="skipIntro"
+          >
+            Skip Intro →
+          </button>
+        </Transition>
+
+        <!-- Resume Prompt -->
+        <Transition name="wp-fade-slide">
+          <div v-if="showResumePrompt" class="wp-resume-prompt">
+            <span class="wp-resume-text">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Lanjut dari {{ resumeFormatted }}?
+            </span>
+            <button class="wp-resume-btn wp-resume-btn--primary" @click="resume">Lanjutkan</button>
+            <button class="wp-resume-btn" @click="startOver">Dari Awal</button>
+          </div>
+        </Transition>
+
+      </div>
+
+      <!-- Report bar -->
+      <div v-if="hasError" class="wp-report-bar">
+        <span class="wp-report-label">Video tidak bisa diputar?</span>
+        <button class="wp-report-btn" @click="reportError('manual')">
+          Laporkan Server {{ activeServer }}
+        </button>
+      </div>
+
+      <!-- Meta bar -->
+      <div class="wp-meta-bar">
+        <div class="wp-meta-left">
+          <span class="wp-type-badge" :class="`wp-type-badge--${info.type}`">
+            {{ TYPE_LABEL[info.type] }}
+          </span>
+          <span class="wp-year">{{ info.year }}</span>
+          <span v-if="info.rating" class="wp-rating">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="#f59e0b">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            {{ info.rating }}
+          </span>
+          <span v-if="info.duration" class="wp-duration">{{ info.duration }}</span>
+          <span v-if="hasEpisodes && activeEpisode" class="wp-ep-now-playing">
+            S{{ activeSeason }} E{{ activeEpisode.ep_num }}
+            <span v-if="activeEpisode.title"> · {{ activeEpisode.title }}</span>
+          </span>
+        </div>
+
+        <div v-if="availableServers.length > 0" class="wp-servers">
+          <span class="wp-servers-label">Server:</span>
+          <button
+            v-for="s in availableServers"
+            :key="s.n"
+            class="wp-server-btn"
+            :class="{ 'wp-server-btn--active': activeServer === s.n }"
+            @click="activeServer = s.n"
+          >
+            {{ s.n }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div class="wp-info">
+        <h1 class="wp-title">{{ info.title }}</h1>
+        <p v-if="info.overview" class="wp-overview">{{ info.overview }}</p>
+        <div v-if="info.genre" class="wp-genres">
+          <span v-for="g in info.genre.split(',')" :key="g" class="wp-genre-pill">
+            {{ g.trim() }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Episodes -->
+      <div v-if="hasEpisodes && seasons.length > 0" class="wp-episodes">
+        <div class="wp-ep-header">
+          <div class="wp-ep-header-left">
+            <div class="wp-ep-bar" />
+            <h2 class="wp-ep-title">Episode</h2>
+          </div>
+          <div v-if="seasons.length > 1" class="wp-season-tabs">
+            <button
+              v-for="s in seasons"
+              :key="s.season_num"
+              class="wp-season-tab"
+              :class="{ 'wp-season-tab--active': activeSeason === s.season_num }"
+              @click="activeSeason = s.season_num"
+            >
+              Season {{ s.season_num }}
+            </button>
+          </div>
+        </div>
+
+        <div class="wp-ep-grid">
+          <button
+            v-for="ep in currentSeason?.episodes ?? []"
+            :key="ep.id"
+            class="wp-ep-card"
+            :class="{ 'wp-ep-card--active': activeEpisode?.id === ep.id }"
+            @click="selectEpisode(ep)"
+          >
+            <div class="wp-ep-card-num">
+              <svg
+                v-if="activeEpisode?.id === ep.id"
+                width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+              >
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span v-else>{{ ep.ep_num }}</span>
+            </div>
+            <div class="wp-ep-card-info">
+              <span class="wp-ep-card-label">Episode {{ ep.ep_num }}</span>
+              <span v-if="ep.title" class="wp-ep-card-title">{{ ep.title }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
 
     </div>
   </div>
