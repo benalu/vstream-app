@@ -1,5 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import Plyr from 'plyr'
+import 'plyr/dist/plyr.css'
 import { useRoute, useRouter } from 'vue-router'
 
 const route  = useRoute()
@@ -10,6 +12,9 @@ const seasons    = ref([])
 const subtitles  = ref([])
 const loading    = ref(true)
 const error      = ref(null)
+
+const videoRef  = ref(null)   // ref ke <video> element
+const plyrInstance = ref(null) // ref ke Plyr instance
 
 const activeServer  = ref(1)
 const activeSeason  = ref(1)
@@ -43,6 +48,7 @@ const fetchWatch = async () => {
     const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
     const res  = await fetch(`${base}/watch/${type}/${tmdbId}`)
     const data = await res.json()
+    
     if (!data.success) throw new Error(data.error)
 
     info.value      = data.data.info
@@ -102,6 +108,90 @@ const selectEpisode = (ep) => {
 
 watch(activeServer, () => { hasError.value = false })
 
+watch(loading, async (isLoading) => {
+  if (!isLoading && currentUrl.value && isDirectVideo.value) {
+    await initPlyr()
+  }
+})
+
+watch([currentUrl, subtitles], async ([newUrl]) => {
+  if (!loading.value && newUrl && isDirectVideo.value) {
+    await initPlyr()
+  }
+}, { immediate: false })
+
+const initPlyr = async () => {
+  await nextTick()
+  await new Promise(r => setTimeout(r, 50))
+  if (!videoRef.value) return
+
+  // Destroy instance lama kalau ada
+  if (plyrInstance.value) {
+    plyrInstance.value.destroy()
+    plyrInstance.value = null
+  }
+
+  plyrInstance.value = new Plyr(videoRef.value, {
+    controls: [
+      'play-large', 'play', 'rewind', 'fast-forward',
+      'progress', 'current-time', 'duration',
+      'mute', 'volume', 'captions', 'settings',
+      'pip', 'fullscreen',
+    ],
+    settings: ['captions', 'speed', 'quality'],
+    captions: { active: true, language: 'id', update: true },
+    speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+    keyboard: { focused: true, global: true },
+    tooltips: { controls: true, seek: true },
+    i18n: {
+      restart: 'Mulai Ulang',
+      rewind: 'Mundur {seektime}s',
+      play: 'Putar',
+      pause: 'Jeda',
+      fastForward: 'Maju {seektime}s',
+      seek: 'Cari',
+      seekLabel: '{currentTime} dari {duration}',
+      played: 'Diputar',
+      buffered: 'Buffered',
+      currentTime: 'Waktu saat ini',
+      duration: 'Durasi',
+      volume: 'Volume',
+      mute: 'Bisukan',
+      unmute: 'Aktifkan suara',
+      enableCaptions: 'Aktifkan subtitle',
+      disableCaptions: 'Nonaktifkan subtitle',
+      download: 'Unduh',
+      enterFullscreen: 'Layar penuh',
+      exitFullscreen: 'Keluar layar penuh',
+      frameTitle: 'Player untuk {title}',
+      captions: 'Subtitle',
+      settings: 'Pengaturan',
+      pip: 'PiP',
+      menuBack: 'Kembali',
+      speed: 'Kecepatan',
+      normal: 'Normal',
+      quality: 'Kualitas',
+      loop: 'Ulangi',
+    },
+  })
+
+  // Auto-aktifkan subtitle bahasa id kalau ada
+  plyrInstance.value.on('ready', () => {
+    const tracks = plyrInstance.value.captions.currentTrackNode
+    if (tracks) plyrInstance.value.captions.active = true
+  })
+
+  // Report error ke backend
+  plyrInstance.value.on('error', () => reportError('load_error'))
+}
+
+onBeforeUnmount(() => {
+  if (plyrInstance.value) {
+    plyrInstance.value.destroy()
+    plyrInstance.value = null
+  }
+})
+
 const isDirectVideo = computed(() => {
   if (!currentUrl.value) return false
   const url = currentUrl.value.toLowerCase().split('?')[0]
@@ -143,29 +233,26 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
       </div>
 
       <div class="wp-player-wrap">
-        <video
-          v-if="currentUrl && isDirectVideo"
-          :key="'video-' + currentUrl"
-          :src="currentUrl"
-          class="wp-video"
-          controls
-          autoplay
-          preload="metadata"
-          controlslist="nodownload"
-          @error="reportError('load_error')"
-          @stalled="reportError('stalled')"
-        >
-          <track
-            v-for="sub in subtitles"
-            :key="sub.lang"
-            :src="sub.url"
-            :srclang="sub.lang"
-            :label="sub.label"
-            kind="subtitles"
-            :default="sub.lang === 'id'"
-          />
-          Browser Anda tidak mendukung pemutaran video.
-        </video>
+        <template v-if="currentUrl && isDirectVideo">
+          <video
+            ref="videoRef"
+            :src="currentUrl || ''"
+            class="wp-video"
+            preload="metadata"
+            playsinline
+            v-show="currentUrl && isDirectVideo"
+          >
+            <track
+              v-for="sub in subtitles"
+              :key="sub.lang"
+              :src="sub.url"
+              :srclang="sub.lang"
+              :label="sub.label"
+              kind="subtitles"
+              :default="sub.lang === 'id'"
+            />
+          </video>
+        </template>
 
         <iframe
           v-else-if="currentUrl && !isDirectVideo"
@@ -368,9 +455,33 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   margin-bottom: 0;
 }
-.wp-video {
-  width: 100%; height: 100%; display: block;
-  background: #000; outline: none;
+/* Override Plyr theme */
+:deep(.plyr) {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  --plyr-color-main: #6366f1;
+  --plyr-font-family: 'DM Sans', system-ui, sans-serif;
+  --plyr-font-size-base: 13px;
+  --plyr-control-radius: 6px;
+  --plyr-video-background: #000;
+  --plyr-range-fill-background: #6366f1;
+}
+
+:deep(.plyr--video .plyr__controls) {
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  padding: 20px 14px 12px;
+}
+
+:deep(.plyr__caption) {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  background: rgba(0,0,0,0.5);
+  border-radius: 4px;
+  padding: 2px 8px;
 }
 .wp-no-url {
   width: 100%; height: 100%;

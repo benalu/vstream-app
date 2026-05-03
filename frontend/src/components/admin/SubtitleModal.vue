@@ -2,6 +2,9 @@
 import { ref, watch } from 'vue'
 import { Captions, Upload, Trash2, Loader2, CheckCircle2 } from 'lucide-vue-next'
 import api from '@/lib/api'
+import { useToast } from '@/composables/useToast'
+
+const { show: showToast, error: showError } = useToast()
 
 const props = defineProps({
   show: { type: Boolean, required: true },
@@ -16,7 +19,6 @@ const existingSubs = ref([])  // subtitle yang sudah ada
 const loading    = ref(false)
 const loadingSubs = ref(false)
 const deletingId = ref(null)
-const successMsg = ref('')
 
 const form = ref({
   lang:  'id',
@@ -43,7 +45,6 @@ const open = async (id, title) => {
   movieTitle.value = title
   form.value = { lang: 'id', label: 'Indonesia', file: null }
   fileError.value  = ''
-  successMsg.value = ''
   if (fileInputRef.value) fileInputRef.value.value = ''
   await fetchExisting()
 }
@@ -97,7 +98,6 @@ const handleSubmit = async () => {
   if (fileError.value) return
 
   loading.value = true
-  successMsg.value = ''
   try {
     const fd = new FormData()
     fd.append('lang',  form.value.lang)
@@ -108,10 +108,11 @@ const handleSubmit = async () => {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
 
-    successMsg.value = `Subtitle ${form.value.label} berhasil diupload`
     form.value.file = null
     if (fileInputRef.value) fileInputRef.value.value = ''
     await fetchExisting()
+    showToast(`Subtitle ${form.value.label} berhasil diupload`)
+    emit('close')
   } catch (err) {
     fileError.value = err.response?.data?.error ?? 'Gagal mengupload subtitle'
   } finally {
@@ -127,7 +128,7 @@ const handleDelete = async (sub) => {
     await api.delete(`/admin/subtitles/${sub.id}`)
     await fetchExisting()
   } catch {
-    alert('Gagal menghapus subtitle')
+    showError('Gagal menghapus subtitle')
   } finally {
     deletingId.value = null
   }
@@ -138,7 +139,6 @@ const handleClose = () => {
   movieId.value    = null
   movieTitle.value = ''
   existingSubs.value = []
-  successMsg.value = ''
   fileError.value  = ''
   emit('close')
 }
@@ -211,13 +211,7 @@ const handleClose = () => {
             <div class="sub-section">
               <p class="sub-section-label">Upload Subtitle Baru</p>
 
-              <!-- Success message -->
-              <Transition name="fade">
-                <div v-if="successMsg" class="sub-success">
-                  <CheckCircle2 :size="14" />
-                  {{ successMsg }}
-                </div>
-              </Transition>
+              
 
               <!-- Lang selector -->
               <div class="mv-field">
@@ -250,7 +244,6 @@ const handleClose = () => {
                   @dragover.prevent="dragover = true"
                   @dragleave="dragover = false"
                   @drop.prevent="onDrop"
-                  @click="fileInputRef?.click()"
                 >
                   <input
                     ref="fileInputRef"
@@ -375,14 +368,6 @@ const handleClose = () => {
 .sub-item-label { font-size: 12.5px; font-weight: 500; color: #fff; }
 .sub-item-file  { font-size: 10.5px; color: var(--muted2); margin-top: 1px; }
 
-/* ── Success ──────────────────────────────────────────────── */
-.sub-success {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px; border-radius: 8px;
-  background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);
-  color: #34d399; font-size: 12.5px;
-}
-
 /* ── Lang selector ────────────────────────────────────────── */
 .sub-lang-selector { display: flex; gap: 6px; }
 .sub-lang-opt {
@@ -430,6 +415,4 @@ const handleClose = () => {
 .mv-modal-leave-active { animation: modal-out 0.18s ease; }
 @keyframes modal-in  { from { opacity:0; transform:scale(0.94) translateY(10px); } }
 @keyframes modal-out { to   { opacity:0; transform:scale(0.96) translateY(6px); } }
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to       { opacity: 0; }
 </style>

@@ -4,6 +4,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"vstream-backend/config"
 	"vstream-backend/database"
 	"vstream-backend/jobs"
@@ -29,7 +30,12 @@ func corsMiddleware() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		origin := allowedOrigin
+		if strings.HasPrefix(c.Request.URL.Path, "/static/subtitles/") {
+			origin = "*"
+		}
+
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")

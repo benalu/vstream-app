@@ -97,6 +97,7 @@
       <main class="vs-content">
         <router-view />
       </main>
+      <ToastContainer />
     </div>
   </div>
 </template>
@@ -105,6 +106,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api'
+import ToastContainer from '@/components/ToastContainer.vue'
 
 const router = useRouter()
 const sidebarOpen = ref(false)
