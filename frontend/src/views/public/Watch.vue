@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue'
 import Plyr from 'plyr'
 import 'plyr/dist/plyr.css'
 import { useRoute, useRouter } from 'vue-router'
@@ -7,27 +7,130 @@ import { useRoute, useRouter } from 'vue-router'
 const route  = useRoute()
 const router = useRouter()
 
+// ── State ─────────────────────────────────────────────────────
 const info       = ref(null)
 const seasons    = ref([])
 const subtitles  = ref([])
 const loading    = ref(true)
 const error      = ref(null)
 
-const videoRef  = ref(null)   // ref ke <video> element
-const plyrInstance = ref(null) // ref ke Plyr instance
+const videoRef     = ref(null)
+const plyrInstance = ref(null)
 
 const activeServer  = ref(1)
 const activeSeason  = ref(1)
 const activeEpisode = ref(null)
 const hasError      = ref(false)
 
+// ── Subtitle Size ─────────────────────────────────────────────
+const subtitleSize = ref(
+  Number(localStorage.getItem('vstream_sub_size')) || 25
+)
+
+watch(subtitleSize, (val) => {
+  localStorage.setItem('vstream_sub_size', val)
+})
+
+const subtitleSizeStyle = computed(() => ({
+  '--subtitle-size': `${subtitleSize.value}px`,
+}))
+
+const increaseSubtitle = () => { if (subtitleSize.value < 150) subtitleSize.value += 2 }
+const decreaseSubtitle = () => { if (subtitleSize.value > 10) subtitleSize.value -= 2 }
+
+// ── Subtitle Color ────────────────────────────────────────────
+const SUBTITLE_COLORS = [
+  { label: 'Putih',   value: '#ffffff' },
+  { label: 'Kuning',  value: '#facc15' },
+  { label: 'Hijau',   value: '#4ade80' },
+  { label: 'Cyan',    value: '#22d3ee' },
+  { label: 'Merah',   value: '#f87171' },
+]
+
+const subtitleColor = ref(
+  localStorage.getItem('vstream_sub_color') || '#ffffff'
+)
+
+watch(subtitleColor, (val) => {
+  localStorage.setItem('vstream_sub_color', val)
+})
+
+const subtitleStyle = computed(() => ({
+  '--subtitle-size':  `${subtitleSize.value}px`,
+  '--subtitle-color': subtitleColor.value,
+}))
+
+// ── Resume Progress ───────────────────────────────────────────
+const showResumePrompt = ref(false)
+const resumeTime       = ref(0)
+
+const storageKey = computed(() =>
+  info.value ? `vstream_progress_${info.value.id}` : null
+)
+
+const saveProgress = () => {
+  if (!plyrInstance.value || !storageKey.value) return
+  const t = plyrInstance.value.currentTime
+  const d = plyrInstance.value.duration
+  if (t < 5 || !d) return
+  if (t / d > 0.95) {
+    localStorage.removeItem(storageKey.value)
+    return
+  }
+  localStorage.setItem(storageKey.value, JSON.stringify({
+    time:     t,
+    duration: d,
+    saved_at: Date.now(),
+  }))
+}
+
+const restoreProgress = () => {
+  if (!storageKey.value) return
+  const raw = localStorage.getItem(storageKey.value)
+  if (!raw) return
+  try {
+    const { time, duration, saved_at } = JSON.parse(raw)
+    const expired  = Date.now() - saved_at > 30 * 24 * 60 * 60 * 1000
+    const finished = duration && (time / duration) > 0.95
+    if (expired || finished || time < 5) return
+    resumeTime.value       = time
+    showResumePrompt.value = true
+  } catch {
+    localStorage.removeItem(storageKey.value)
+  }
+}
+
+const resume = () => {
+  if (plyrInstance.value) {
+    plyrInstance.value.currentTime = resumeTime.value
+    plyrInstance.value.play()
+  }
+  showResumePrompt.value = false
+}
+
+const startOver = () => {
+  showResumePrompt.value = false
+  resumeTime.value = 0
+}
+
+// ── Skip Intro ────────────────────────────────────────────────
+const showSkipIntro  = ref(false)
+const INTRO_START    = 30
+const INTRO_END      = 90
+
+const skipIntro = () => {
+  if (plyrInstance.value) plyrInstance.value.currentTime = INTRO_END
+  showSkipIntro.value = false
+}
+
+// ── Report Error ──────────────────────────────────────────────
 const reportError = async (errorType = 'load_error') => {
   hasError.value = true
   if (!info.value?.id) return
   try {
     const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
     await fetch(`${base}/logs/playback-error`, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         movie_id:   info.value.id,
@@ -35,20 +138,25 @@ const reportError = async (errorType = 'load_error') => {
         error_type: errorType,
       }),
     })
-  } catch {
-    // Jangan ganggu user kalau laporan gagal
-  }
+  } catch { /* silent */ }
 }
 
+// ── Fetch ─────────────────────────────────────────────────────
 const fetchWatch = async () => {
   loading.value = true
   error.value   = null
+  showResumePrompt.value = false
+
+  if (plyrInstance.value) {
+    plyrInstance.value.destroy()
+    plyrInstance.value = null
+  }
+
   try {
     const { type, tmdbId } = route.params
     const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
     const res  = await fetch(`${base}/watch/${type}/${tmdbId}`)
     const data = await res.json()
-    
     if (!data.success) throw new Error(data.error)
 
     info.value      = data.data.info
@@ -69,6 +177,7 @@ const fetchWatch = async () => {
 onMounted(fetchWatch)
 watch(() => route.params, fetchWatch)
 
+// ── Computed ──────────────────────────────────────────────────
 const hasEpisodes = computed(() =>
   info.value?.type === 'series' ||
   (info.value?.type === 'anime' && info.value?.has_episodes)
@@ -99,34 +208,118 @@ const currentUrl = computed(() => {
   return found?.url ?? servers[0]?.url ?? ''
 })
 
-const selectEpisode = (ep) => {
-  activeEpisode.value = ep
-  activeServer.value  = 1
-  hasError.value      = false
-  document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-watch(activeServer, () => { hasError.value = false })
-
-watch(loading, async (isLoading) => {
-  if (!isLoading && currentUrl.value && isDirectVideo.value) {
-    await initPlyr()
-  }
+const isDirectVideo = computed(() => {
+  if (!currentUrl.value) return false
+  const url = currentUrl.value.toLowerCase().split('?')[0]
+  return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/.test(url)
 })
 
-watch([currentUrl, subtitles], async ([newUrl]) => {
-  if (!loading.value && newUrl && isDirectVideo.value) {
-    await initPlyr()
-  }
-}, { immediate: false })
+const resumeFormatted = computed(() => {
+  const m = Math.floor(resumeTime.value / 60)
+  const s = String(Math.floor(resumeTime.value % 60)).padStart(2, '0')
+  return `${m}:${s}`
+})
 
+// ── MutationObserver for Plyr menu injection ──────────────────
+let _menuObserver = null
+
+const watchPlyrMenu = () => {
+  if (_menuObserver) {
+    _menuObserver.disconnect()
+    _menuObserver = null
+  }
+
+  const container = plyrInstance.value?.elements?.container
+  if (!container) return
+
+  _menuObserver = new MutationObserver(() => {
+    // Cari panel captions/subtitle Plyr yang sudah ada
+    const captionsPanel = container.querySelector(
+      '[id$="-captions"]:not([hidden])'
+    )
+    if (
+      captionsPanel &&
+      !captionsPanel.querySelector('.plyr-subtitle-size-panel')
+    ) {
+      injectSubtitleSizeIntoPanel(captionsPanel)
+    }
+  })
+
+  _menuObserver.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] })
+}
+
+const injectSubtitleSizeIntoPanel = (captionsPanel) => {
+  const wrapper = document.createElement('div')
+  wrapper.className = 'plyr-subtitle-size-panel'
+  wrapper.innerHTML = `
+    <div class="plyr-sub-size-label">Ukuran Subtitle</div>
+    <div class="plyr-sub-size-row">
+      <button type="button" class="plyr-sub-size-btn" data-action="decrease">A−</button>
+      <span class="plyr-sub-size-display">${subtitleSize.value}px</span>
+      <button type="button" class="plyr-sub-size-btn" data-action="increase">A+</button>
+    </div>
+    <div class="plyr-sub-size-slider-wrap">
+      <span class="plyr-sub-size-min">10px</span>
+      <input type="range" class="plyr-sub-size-slider" min="10" max="150" step="2" value="${subtitleSize.value}" />
+      <span class="plyr-sub-size-max">150px</span>
+    </div>
+    <div class="plyr-sub-size-label" style="margin-top:4px">Warna Subtitle</div>
+    <div class="plyr-sub-color-row">
+      ${SUBTITLE_COLORS.map(c => `
+        <button
+          type="button"
+          class="plyr-sub-color-btn ${subtitleColor.value === c.value ? 'plyr-sub-color-btn--active' : ''}"
+          data-color="${c.value}"
+          title="${c.label}"
+          style="background:${c.value}"
+        ></button>
+      `).join('')}
+    </div>
+  `
+
+  captionsPanel.appendChild(wrapper)
+
+  wrapper.querySelectorAll('.plyr-sub-size-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.action === 'increase') increaseSubtitle()
+      else decreaseSubtitle()
+      syncSubtitleSizeUI(wrapper)
+    })
+  })
+
+  const slider = wrapper.querySelector('.plyr-sub-size-slider')
+  slider.addEventListener('input', (e) => {
+    subtitleSize.value = Number(e.target.value)
+    syncSubtitleSizeUI(wrapper)
+  })
+
+  wrapper.querySelectorAll('.plyr-sub-color-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    subtitleColor.value = b.dataset.color
+    // Update active state
+    wrapper.querySelectorAll('.plyr-sub-color-btn').forEach(x =>
+      x.classList.toggle('plyr-sub-color-btn--active', x.dataset.color === b.dataset.color)
+    )
+  })
+})
+}
+
+const syncSubtitleSizeUI = (wrapper) => {
+  const display = wrapper?.querySelector('.plyr-sub-size-display')
+  if (display) display.textContent = `${subtitleSize.value}px`
+
+  const slider = wrapper?.querySelector('.plyr-sub-size-slider')
+  if (slider) slider.value = subtitleSize.value
+}
+
+// ── Plyr Init ─────────────────────────────────────────────────
 const initPlyr = async () => {
   await nextTick()
-  await new Promise(r => setTimeout(r, 50))
   if (!videoRef.value) return
 
-  // Destroy instance lama kalau ada
   if (plyrInstance.value) {
+    _menuObserver?.disconnect()
+    _menuObserver = null
     plyrInstance.value.destroy()
     plyrInstance.value = null
   }
@@ -138,71 +331,105 @@ const initPlyr = async () => {
       'mute', 'volume', 'captions', 'settings',
       'pip', 'fullscreen',
     ],
-    settings: ['captions', 'speed', 'quality'],
-    captions: { active: true, language: 'id', update: true },
-    speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-    keyboard: { focused: true, global: true },
-    tooltips: { controls: true, seek: true },
+    settings:  ['captions', 'speed'],
+    captions:  { active: true, language: 'id', update: true },
+    speed:     { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+    keyboard:  { focused: true, global: true },
+    tooltips:  { controls: true, seek: true },
     i18n: {
-      restart: 'Mulai Ulang',
-      rewind: 'Mundur {seektime}s',
-      play: 'Putar',
-      pause: 'Jeda',
-      fastForward: 'Maju {seektime}s',
-      seek: 'Cari',
-      seekLabel: '{currentTime} dari {duration}',
-      played: 'Diputar',
-      buffered: 'Buffered',
-      currentTime: 'Waktu saat ini',
-      duration: 'Durasi',
-      volume: 'Volume',
-      mute: 'Bisukan',
-      unmute: 'Aktifkan suara',
-      enableCaptions: 'Aktifkan subtitle',
-      disableCaptions: 'Nonaktifkan subtitle',
-      download: 'Unduh',
-      enterFullscreen: 'Layar penuh',
-      exitFullscreen: 'Keluar layar penuh',
-      frameTitle: 'Player untuk {title}',
-      captions: 'Subtitle',
-      settings: 'Pengaturan',
-      pip: 'PiP',
-      menuBack: 'Kembali',
-      speed: 'Kecepatan',
-      normal: 'Normal',
-      quality: 'Kualitas',
-      loop: 'Ulangi',
+      restart:          'Mulai Ulang',
+      rewind:           'Mundur {seektime}s',
+      play:             'Putar',
+      pause:            'Jeda',
+      fastForward:      'Maju {seektime}s',
+      seek:             'Cari',
+      seekLabel:        '{currentTime} dari {duration}',
+      played:           'Diputar',
+      buffered:         'Buffered',
+      currentTime:      'Waktu saat ini',
+      duration:         'Durasi',
+      volume:           'Volume',
+      mute:             'Bisukan',
+      unmute:           'Aktifkan suara',
+      enableCaptions:   'Aktifkan subtitle',
+      disableCaptions:  'Nonaktifkan subtitle',
+      enterFullscreen:  'Layar penuh',
+      exitFullscreen:   'Keluar layar penuh',
+      captions:         'Subtitle',
+      settings:         'Pengaturan',
+      pip:              'PiP',
+      menuBack:         'Kembali',
+      speed:            'Kecepatan',
+      normal:           'Normal',
     },
   })
 
-  // Auto-aktifkan subtitle bahasa id kalau ada
   plyrInstance.value.on('ready', () => {
-    const tracks = plyrInstance.value.captions.currentTrackNode
-    if (tracks) plyrInstance.value.captions.active = true
+    if (plyrInstance.value?.captions) {
+      plyrInstance.value.captions.active = true
+    }
+    restoreProgress()
+    // Mulai observe Plyr container untuk inject menu subtitle size
+    watchPlyrMenu()
   })
 
-  // Report error ke backend
+  plyrInstance.value.on('timeupdate', () => {
+    saveProgress()
+
+    if (hasEpisodes.value) {
+      const t = plyrInstance.value?.currentTime ?? 0
+      showSkipIntro.value = t >= INTRO_START && t <= INTRO_END
+    }
+  })
+
+  plyrInstance.value.on('ended', () => {
+    showSkipIntro.value = false
+    if (storageKey.value) localStorage.removeItem(storageKey.value)
+  })
+
   plyrInstance.value.on('error', () => reportError('load_error'))
 }
 
-onBeforeUnmount(() => {
-  if (plyrInstance.value) {
-    plyrInstance.value.destroy()
-    plyrInstance.value = null
-  }
+watchEffect(async () => {
+  const el  = videoRef.value
+  const url = currentUrl.value
+  const ok  = isDirectVideo.value
+  if (!el || !url || !ok) return
+  await initPlyr()
 })
 
-const isDirectVideo = computed(() => {
-  if (!currentUrl.value) return false
-  const url = currentUrl.value.toLowerCase().split('?')[0]
-  return /\.(mp4|mkv|webm|ogg|avi|mov|m3u8)$/.test(url)
+watch(activeServer, () => {
+  _menuObserver?.disconnect()
+  _menuObserver = null
+  hasError.value         = false
+  showResumePrompt.value = false
+  showSkipIntro.value    = false
 })
+
+onBeforeUnmount(() => {
+  _menuObserver?.disconnect()
+  _menuObserver = null
+  saveProgress()
+  plyrInstance.value?.destroy()
+})
+
+// ── Episode ───────────────────────────────────────────────────
+const selectEpisode = (ep) => {
+  saveProgress()
+  activeEpisode.value    = ep
+  activeServer.value     = 1
+  hasError.value         = false
+  showResumePrompt.value = false
+  showSkipIntro.value    = false
+  document.querySelector('.wp-player-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 </script>
 
 <template>
   <div class="wp-root">
+
     <!-- Loading -->
     <div v-if="loading" class="wp-loading">
       <div class="wp-spinner" />
@@ -222,25 +449,30 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 
     <!-- Main -->
     <div v-else-if="info" class="wp-page">
+
+      <!-- Breadcrumb -->
       <div class="wp-breadcrumb">
         <button class="wp-bc-btn" @click="router.push('/')">Home</button>
         <span class="wp-bc-sep">›</span>
         <span class="wp-bc-current">{{ info.title }}</span>
-        <span v-if="hasEpisodes && activeEpisode" class="wp-bc-sep">›</span>
-        <span v-if="hasEpisodes && activeEpisode" class="wp-bc-current">
-          S{{ activeSeason }}E{{ activeEpisode.ep_num }}
-        </span>
+        <template v-if="hasEpisodes && activeEpisode">
+          <span class="wp-bc-sep">›</span>
+          <span class="wp-bc-current">S{{ activeSeason }}E{{ activeEpisode.ep_num }}</span>
+        </template>
       </div>
 
-      <div class="wp-player-wrap">
+      <!-- Player -->
+      <div class="wp-player-wrap" :style="subtitleStyle">
+
+        <!-- Direct video → Plyr -->
         <template v-if="currentUrl && isDirectVideo">
           <video
             ref="videoRef"
-            :src="currentUrl || ''"
+            :key="currentUrl"
+            :src="currentUrl"
             class="wp-video"
             preload="metadata"
             playsinline
-            v-show="currentUrl && isDirectVideo"
           >
             <track
               v-for="sub in subtitles"
@@ -254,6 +486,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </video>
         </template>
 
+        <!-- Iframe -->
         <iframe
           v-else-if="currentUrl && !isDirectVideo"
           :key="'iframe-' + currentUrl"
@@ -265,14 +498,42 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
         />
 
+        <!-- No URL -->
         <div v-else class="wp-no-url">
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
             <polygon points="5 3 19 12 5 21 5 3" opacity=".3"/>
           </svg>
           <p>URL stream belum tersedia</p>
         </div>
+
+        <!-- Skip Intro — hanya series/anime -->
+        <Transition name="wp-fade-slide">
+          <button
+            v-if="showSkipIntro && hasEpisodes"
+            class="wp-skip-intro"
+            @click="skipIntro"
+          >
+            Skip Intro →
+          </button>
+        </Transition>
+
+        <!-- Resume Prompt -->
+        <Transition name="wp-fade-slide">
+          <div v-if="showResumePrompt" class="wp-resume-prompt">
+            <span class="wp-resume-text">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Lanjut dari {{ resumeFormatted }}?
+            </span>
+            <button class="wp-resume-btn wp-resume-btn--primary" @click="resume">Lanjutkan</button>
+            <button class="wp-resume-btn" @click="startOver">Dari Awal</button>
+          </div>
+        </Transition>
+
       </div>
 
+      <!-- Report bar -->
       <div v-if="hasError" class="wp-report-bar">
         <span class="wp-report-label">Video tidak bisa diputar?</span>
         <button class="wp-report-btn" @click="reportError('manual')">
@@ -280,6 +541,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </button>
       </div>
 
+      <!-- Meta bar -->
       <div class="wp-meta-bar">
         <div class="wp-meta-left">
           <span class="wp-type-badge" :class="`wp-type-badge--${info.type}`">
@@ -313,6 +575,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </div>
       </div>
 
+      <!-- Info -->
       <div class="wp-info">
         <h1 class="wp-title">{{ info.title }}</h1>
         <p v-if="info.overview" class="wp-overview">{{ info.overview }}</p>
@@ -323,6 +586,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
         </div>
       </div>
 
+      <!-- Episodes -->
       <div v-if="hasEpisodes && seasons.length > 0" class="wp-episodes">
         <div class="wp-ep-header">
           <div class="wp-ep-header-left">
@@ -351,8 +615,10 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
             @click="selectEpisode(ep)"
           >
             <div class="wp-ep-card-num">
-              <svg v-if="activeEpisode?.id === ep.id"
-                width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <svg
+                v-if="activeEpisode?.id === ep.id"
+                width="14" height="14" viewBox="0 0 24 24" fill="currentColor"
+              >
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
               <span v-else>{{ ep.ep_num }}</span>
@@ -364,6 +630,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
           </button>
         </div>
       </div>
+
     </div>
   </div>
 </template>
@@ -371,6 +638,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
 
+/* ── Base ────────────────────────────────────────────────────── */
 .wp-root {
   min-height: 100vh;
   background: #07070e;
@@ -378,6 +646,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
+/* ── Loading & Error ─────────────────────────────────────────── */
 .wp-loading, .wp-error {
   display: flex;
   flex-direction: column;
@@ -396,6 +665,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
 .wp-back-btn {
   padding: 8px 18px; border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.1);
@@ -405,23 +675,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
 }
 .wp-back-btn:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
 
-.wp-report-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 6px 0;
-}
-.wp-report-label { font-size: 11.5px; color: #475569; }
-.wp-report-btn {
-  font-size: 11.5px; font-weight: 600; color: #ef4444;
-  background: rgba(239,68,68,0.08);
-  border: 1px solid rgba(239,68,68,0.2);
-  border-radius: 6px; padding: 4px 10px;
-  cursor: pointer; font-family: inherit; transition: all 0.15s;
-}
-.wp-report-btn:hover { background: rgba(239,68,68,0.15); }
-
+/* ── Page layout ─────────────────────────────────────────────── */
 .wp-page {
   padding-top: 70px;
   max-width: 1100px;
@@ -431,6 +685,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   padding-bottom: 60px;
 }
 
+/* ── Breadcrumb ──────────────────────────────────────────────── */
 .wp-breadcrumb {
   display: flex; align-items: center; gap: 8px;
   padding: 20px 0 14px; font-size: 12.5px;
@@ -448,14 +703,20 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   max-width: 280px;
 }
 
+/* ── Player wrap ─────────────────────────────────────────────── */
 .wp-player-wrap {
-  width: 100%; aspect-ratio: 16/9;
-  background: #000; border-radius: 14px;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #000;
+  border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   margin-bottom: 0;
+  position: relative;
+  --subtitle-size: 16px;
 }
-/* Override Plyr theme */
+
+/* ── Plyr overrides ──────────────────────────────────────────── */
 :deep(.plyr) {
   width: 100%;
   height: 100%;
@@ -468,21 +729,23 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   --plyr-video-background: #000;
   --plyr-range-fill-background: #6366f1;
 }
-
 :deep(.plyr--video .plyr__controls) {
   background: linear-gradient(transparent, rgba(0,0,0,0.7));
   padding: 20px 14px 12px;
 }
-
 :deep(.plyr__caption) {
+  font-size: var(--subtitle-size) !important;
+  color: var(--subtitle-color, #ffffff) !important;
   font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 16px;
   font-weight: 500;
   text-shadow: 0 1px 4px rgba(0,0,0,0.9);
   background: rgba(0,0,0,0.5);
   border-radius: 4px;
   padding: 2px 8px;
+  transition: font-size 0.15s ease, color 0.15s ease;
 }
+
+/* ── No URL placeholder ──────────────────────────────────────── */
 .wp-no-url {
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
@@ -490,6 +753,228 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   gap: 12px; color: #334155; font-size: 13px;
 }
 
+/* ── Skip Intro ──────────────────────────────────────────────── */
+.wp-skip-intro {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  z-index: 10;
+  padding: 8px 18px;
+  border-radius: 4px;
+  border: 2px solid rgba(255,255,255,0.8);
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+}
+.wp-skip-intro:hover {
+  background: rgba(255,255,255,0.15);
+  border-color: #fff;
+}
+
+/* ── Resume Prompt ───────────────────────────────────────────── */
+.wp-resume-prompt {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  flex-wrap: wrap;
+}
+.wp-resume-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.wp-resume-btn {
+  padding: 4px 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.wp-resume-btn:hover { background: rgba(255,255,255,0.1); }
+.wp-resume-btn--primary {
+  background: #6366f1;
+  border-color: transparent;
+}
+.wp-resume-btn--primary:hover { background: #818cf8; }
+
+/* ── Transitions ─────────────────────────────────────────────── */
+.wp-fade-slide-enter-active,
+.wp-fade-slide-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.wp-fade-slide-enter-from,
+.wp-fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* ── Report bar ──────────────────────────────────────────────── */
+.wp-report-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 6px 0;
+}
+.wp-report-label { font-size: 11.5px; color: #475569; }
+.wp-report-btn {
+  font-size: 11.5px; font-weight: 600; color: #ef4444;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 6px; padding: 4px 10px;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.wp-report-btn:hover { background: rgba(239,68,68,0.15); }
+
+/* ── Custom subtitle size panel di dalam Plyr settings ───────── */
+:deep(.plyr__menu__container) {
+  min-width: 200px;
+}
+
+:deep(.plyr-subtitle-size-panel) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 16px;
+}
+
+:deep(.plyr-sub-size-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+:deep(.plyr-sub-size-btn) {
+  background: rgba(99,102,241,0.2);
+  border: 1px solid rgba(99,102,241,0.35);
+  border-radius: 6px;
+  color: #a5b4fc;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  /* HAPUS width: 100% — supaya tidak full width lagi */
+}
+
+:deep(.plyr-sub-size-btn:hover) {
+  background: rgba(99,102,241,0.4);
+  border-color: rgba(99,102,241,0.7);
+  color: #fff;
+}
+
+:deep(.plyr-sub-size-display) {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  min-width: 42px;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+:deep(.plyr-sub-size-slider-wrap) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 2px;
+}
+
+:deep(.plyr-sub-size-min),
+:deep(.plyr-sub-size-max) {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+:deep(.plyr-sub-size-slider) {
+  flex: 1;
+  accent-color: #6366f1;
+  cursor: pointer;
+  height: 4px;
+  min-width: 0; /* fix overflow di container sempit */
+}
+
+:deep(.plyr__menu__container) {
+  min-width: 200px;
+  background: #1a1a2e !important;
+  border: 1px solid rgba(99,102,241,0.2);
+}
+
+/* Paksa semua teks dalam menu jadi terang */
+:deep(.plyr__menu__container *) {
+  color: #c7c8ff;
+}
+
+:deep(.plyr-sub-size-label) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 14px 4px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 4px;
+}
+
+:deep(.plyr-sub-color-row) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 12px;
+}
+
+:deep(.plyr-sub-color-btn) {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+:deep(.plyr-sub-color-btn:hover) {
+  transform: scale(1.2);
+}
+
+:deep(.plyr-sub-color-btn--active) {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.6);
+  transform: scale(1.15);
+}
+
+/* ── Meta bar ────────────────────────────────────────────────── */
 .wp-meta-bar {
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; padding: 14px 0;
@@ -531,6 +1016,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   box-shadow: 0 0 14px rgba(99,102,241,0.4);
 }
 
+/* ── Info ────────────────────────────────────────────────────── */
 .wp-info { margin-bottom: 40px; }
 .wp-title {
   font-family: 'Bebas Neue', sans-serif;
@@ -550,6 +1036,7 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   border: 1px solid rgba(255,255,255,0.08);
 }
 
+/* ── Episodes ────────────────────────────────────────────────── */
 .wp-episodes { margin-top: 8px; }
 .wp-ep-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -561,7 +1048,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   background: #6366f1; box-shadow: 0 0 10px rgba(99,102,241,0.6); flex-shrink: 0;
 }
 .wp-ep-title { font-size: 17px; font-weight: 700; color: #fff; }
-
 .wp-season-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .wp-season-tab {
   padding: 5px 14px; border-radius: 20px;
@@ -575,7 +1061,6 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   background: rgba(99,102,241,0.15);
   border-color: rgba(99,102,241,0.4); color: #818cf8;
 }
-
 .wp-ep-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -612,9 +1097,14 @@ const TYPE_LABEL = { movie: 'Movie', series: 'Series', anime: 'Anime' }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .wp-page { padding-left: 16px; padding-right: 16px; }
   .wp-ep-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .wp-meta-bar { flex-direction: column; align-items: flex-start; }
+  .wp-skip-intro { bottom: 70px; right: 12px; font-size: 12px; padding: 6px 14px; }
+  .wp-resume-prompt { bottom: 70px; left: 12px; }
+  .wp-sub-control { gap: 8px; }
+  .wp-sub-slider { max-width: 100px; }
 }
 </style>
