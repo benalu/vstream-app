@@ -18,24 +18,42 @@ export default defineConfig({
     },
   },
     build: {
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          drop_console: true,   // hapus console.log di production
-          drop_debugger: true,
-          pure_funcs: ['console.log', 'console.error', 'console.warn'],
-        },
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.error', 'console.warn'],
       },
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vue-core': ['vue', 'vue-router'],
-            'plyr':     ['plyr'],
-            'lucide':   ['lucide-vue-next'],
-            'axios':    ['axios'],
-          },
-        },
-      },
-      cssCodeSplit: true,
     },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Vue core — needed everywhere
+          if (id.includes('node_modules/vue') || id.includes('node_modules/vue-router')) {
+            return 'vue-core'
+          }
+          // Plyr is heavy (~300KB) and only used on the Watch page
+          // It's already lazy-imported in usePlayer.js via import('plyr')
+          // so Rollup should already split it — this just makes it explicit
+          if (id.includes('node_modules/plyr')) {
+            return 'plyr'
+          }
+          // Lucide icons — only needed in admin/UI
+          if (id.includes('node_modules/lucide')) {
+            return 'lucide'
+          }
+          // Axios
+          if (id.includes('node_modules/axios')) {
+            return 'axios'
+          }
+          // Fontsource — split per font to avoid loading unused weights
+          if (id.includes('@fontsource')) {
+            return 'fonts'
+          }
+        },
+      },
+    },
+    cssCodeSplit: true,
+  },
 })

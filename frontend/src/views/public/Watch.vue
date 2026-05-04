@@ -1,8 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import VideoPlayer   from '@/components/public/watch/VideoPlayer.vue'
+const VideoPlayer = defineAsyncComponent(() =>
+  import('@/components/public/watch/VideoPlayer.vue')
+)
 import EpisodeList   from '@/components/public/watch/EpisodeList.vue'
 import ReportBar     from '@/components/public/watch/ReportBar.vue'
 import ServerSelector from '@/components/public/watch/ServerSelector.vue'
@@ -50,7 +52,17 @@ const fetchWatch = async () => {
   }
 }
 
-onMounted(fetchWatch)
+onMounted(() => {
+  fetchWatch()
+
+  // Prefetch VideoPlayer di background saat browser idle
+  // supaya kalau user scroll ke player, sudah siap
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(() => {
+      import('@/components/public/watch/VideoPlayer.vue')
+    })
+  }
+})
 watch(() => route.params, fetchWatch)
 
 // ── Computed ───────────────────────────────────────────────────
@@ -121,9 +133,15 @@ watch(activeServer, () => { hasError.value = false })
   <div class="wp-root">
 
     <!-- Loading -->
-    <div v-if="loading" class="wp-loading">
-      <div class="wp-spinner" />
-      <p>Memuat konten...</p>
+    <div v-if="loading" class="wp-page">
+      <div class="wp-breadcrumb" style="opacity:0.3">
+        <span>Home</span>
+        <span class="wp-bc-sep">›</span>
+        <span class="wp-bc-current">Memuat...</span>
+      </div>
+      <div class="wp-player-skeleton"></div>
+      <div class="wp-meta-bar-skeleton"></div>
+      <div class="wp-title-skeleton"></div>
     </div>
 
     <!-- Error -->
@@ -153,14 +171,19 @@ watch(activeServer, () => { hasError.value = false })
 
       <!-- Player -->
       <div class="wp-player-wrap">
-        <VideoPlayer
-          ref="playerRef"
-          :src="currentUrl"
-          :subtitles="subtitles"
-          :has-episodes="hasEpisodes"
-          :storage-key="storageKey"
-          @error="reportError('load_error')"
-        />
+        <Suspense>
+          <VideoPlayer
+            ref="playerRef"
+            :src="currentUrl"
+            :subtitles="subtitles"
+            :has-episodes="hasEpisodes"
+            :storage-key="storageKey"
+            @error="reportError('load_error')"
+          />
+          <template #fallback>
+            <div class="wp-player-skeleton"></div>
+          </template>
+        </Suspense>
       </div>
 
       <!-- Report Bar -->
@@ -230,19 +253,41 @@ watch(activeServer, () => { hasError.value = false })
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-.wp-loading, .wp-error {
+.wp-error {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   min-height: 80vh; gap: 16px;
   color: #64748b; font-size: 14px;
 }
-.wp-spinner {
-  width: 36px; height: 36px;
-  border: 3px solid rgba(99,102,241,0.2);
-  border-top-color: #6366f1;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+
+.wp-player-skeleton {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #0d0d18 25%, #12121f 50%, #0d0d18 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
 }
+
+.wp-meta-bar-skeleton {
+  height: 44px;
+  border-radius: 8px;
+  margin: 14px 0;
+  background: linear-gradient(90deg, #0d0d18 25%, #12121f 50%, #0d0d18 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
+
+.wp-title-skeleton {
+  height: 56px;
+  width: 60%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #0d0d18 25%, #12121f 50%, #0d0d18 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
+
+@keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .wp-back-btn {
