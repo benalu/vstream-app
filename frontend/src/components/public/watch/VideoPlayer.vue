@@ -283,8 +283,8 @@ defineExpose({ plyrInstance })
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
   flex-wrap: wrap;
+  max-width: min(400px, calc(100% - 40px));
 }
-
 .vp-resume-text {
   display: flex;
   align-items: center;
@@ -293,7 +293,6 @@ defineExpose({ plyrInstance })
   font-size: 13px;
   font-weight: 500;
 }
-
 .vp-resume-btn {
   padding: 4px 12px;
   border-radius: 5px;
@@ -305,6 +304,7 @@ defineExpose({ plyrInstance })
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .vp-resume-btn:hover { background: rgba(255, 255, 255, 0.1); }
 .vp-resume-btn--primary {
@@ -340,6 +340,7 @@ defineExpose({ plyrInstance })
   padding: 2px 8px;
   transition: font-size 0.15s ease, color 0.15s ease;
 }
+
 
 /* ── Plyr settings menu overrides ────────────────────────────── */
 :deep(.plyr__menu__container) {
@@ -422,15 +423,29 @@ defineExpose({ plyrInstance })
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vp-skip-intro  { bottom: 70px; right: 12px; font-size: 12px; padding: 6px 14px; }
-  .vp-resume-prompt { bottom: 70px; left: 12px; }
+  .vp-resume-prompt {
+    bottom: 56px;
+    left: 10px;
+    right: 10px;
+    max-width: unset;
+    padding: 8px 12px;
+    gap: 8px;
+    border-radius: 6px;
+    backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.88);
+  }
+  .vp-resume-text {
+    font-size: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .vp-resume-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
 }
 
 @media (max-width: 768px) {
-  .vp-resume-prompt {
-    backdrop-filter: none;
-    background: rgba(0, 0, 0, 0.92); /* kompensasi dengan opacity lebih tinggi */
-  }
   .vp-skip-intro {
     backdrop-filter: none;
     background: rgba(0, 0, 0, 0.85);

@@ -156,7 +156,7 @@ watch(activeServer, () => { hasError.value = false })
     </div>
 
     <!-- Main -->
-    <div v-else-if="info" class="wp-page">
+    <main v-else-if="info" class="wp-page">
 
       <!-- Breadcrumb -->
       <div class="wp-breadcrumb">
@@ -239,7 +239,7 @@ watch(activeServer, () => { hasError.value = false })
         @select-episode="selectEpisode"
       />
 
-    </div>
+    </main>
   </div>
 </template>
 
@@ -381,6 +381,12 @@ watch(activeServer, () => { hasError.value = false })
 }
 
 @media (max-width: 640px) {
+  .wp-player-wrap {
+    margin-left: -16px;
+    margin-right: -16px;
+    width: calc(100% + 32px);
+    border-radius: 0;
+  }
   .wp-page { padding-left: 16px; padding-right: 32px; }
   .wp-meta-bar { flex-direction: column; align-items: flex-start; }
 }

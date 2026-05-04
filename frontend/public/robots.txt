@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /admin/login
+
+# Ganti dengan domain aslimu
+# Sitemap: https://yourdomain.com/sitemap.xml
