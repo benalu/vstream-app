@@ -425,4 +425,15 @@ defineExpose({ plyrInstance })
   .vp-skip-intro  { bottom: 70px; right: 12px; font-size: 12px; padding: 6px 14px; }
   .vp-resume-prompt { bottom: 70px; left: 12px; }
 }
+
+@media (max-width: 768px) {
+  .vp-resume-prompt {
+    backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.92); /* kompensasi dengan opacity lebih tinggi */
+  }
+  .vp-skip-intro {
+    backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.85);
+  }
+}
 </style>

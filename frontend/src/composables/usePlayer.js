@@ -1,6 +1,4 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
-import Plyr from 'plyr'
-import 'plyr/dist/plyr.css'
 
 /**
  * usePlayer — Plyr lifecycle + subtitle size menu injection.
@@ -81,23 +79,28 @@ export function usePlayer({
   }
 
   // ── Init ───────────────────────────────────────────────────
-  const initPlyr = (videoEl) => {
-    destroyPlyr()
+  const initPlyr = async (videoEl) => {
+  destroyPlyr()
 
-    plyrInstance.value = new Plyr(videoEl, PLYR_OPTIONS)
+  const [{ default: Plyr }] = await Promise.all([
+    import('plyr'),
+    import('plyr/dist/plyr.css'),
+  ])
 
-    plyrInstance.value.on('ready', () => {
-      if (plyrInstance.value?.captions) {
-        plyrInstance.value.captions.active = true
-      }
-      _watchPlyrMenu()
-      onReady?.()
-    })
+  plyrInstance.value = new Plyr(videoEl, PLYR_OPTIONS)
 
-    plyrInstance.value.on('timeupdate', () => onTimeUpdate?.())
-    plyrInstance.value.on('ended',      () => onEnded?.())
-    plyrInstance.value.on('error',      () => onError?.())
-  }
+  plyrInstance.value.on('ready', () => {
+    if (plyrInstance.value?.captions) {
+      plyrInstance.value.captions.active = true
+    }
+    _watchPlyrMenu()
+    onReady?.()
+  })
+
+  plyrInstance.value.on('timeupdate', () => onTimeUpdate?.())
+  plyrInstance.value.on('ended',      () => onEnded?.())
+  plyrInstance.value.on('error',      () => onError?.())
+}
 
   // ── Destroy ────────────────────────────────────────────────
   const destroyPlyr = () => {

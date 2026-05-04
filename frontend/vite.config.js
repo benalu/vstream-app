@@ -17,4 +17,25 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+    build: {
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,   // hapus console.log di production
+          drop_debugger: true,
+          pure_funcs: ['console.log', 'console.error', 'console.warn'],
+        },
+      },
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vue-core': ['vue', 'vue-router'],
+            'plyr':     ['plyr'],
+            'lucide':   ['lucide-vue-next'],
+            'axios':    ['axios'],
+          },
+        },
+      },
+      cssCodeSplit: true,
+    },
 })

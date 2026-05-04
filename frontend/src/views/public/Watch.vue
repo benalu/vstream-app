@@ -221,7 +221,7 @@ watch(activeServer, () => { hasError.value = false })
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
 
 .wp-root {
   min-height: 100vh;
