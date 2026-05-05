@@ -341,7 +341,6 @@ defineExpose({ plyrInstance })
   transition: font-size 0.15s ease, color 0.15s ease;
 }
 
-
 /* ── Plyr settings menu overrides ────────────────────────────── */
 :deep(.plyr__menu__container) {
   min-width: 200px;

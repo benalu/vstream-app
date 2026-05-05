@@ -43,7 +43,7 @@ export function usePlayer({
       'play-large', 'play', 'rewind', 'fast-forward',
       'progress', 'current-time', 'duration',
       'mute', 'volume', 'captions', 'settings',
-      'pip', 'fullscreen',
+      'fullscreen',
     ],
     settings:  ['captions', 'speed'],
     captions:  { active: true, language: 'id', update: true },
