@@ -178,6 +178,7 @@ watch(activeServer, () => { hasError.value = false })
             :subtitles="subtitles"
             :has-episodes="hasEpisodes"
             :storage-key="storageKey"
+            :poster="info.backdrop || info.poster || ''"
             @error="reportError('load_error')"
           />
           <template #fallback>
@@ -380,14 +381,71 @@ watch(activeServer, () => { hasError.value = false })
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-@media (max-width: 640px) {
+/* ── Mobile Player — Responsive semua ukuran ─────────────────── */
+@media (max-width: 768px) {
+  .wp-page {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 56px;
+  }
+
+  .wp-breadcrumb {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
   .wp-player-wrap {
-    margin-left: -16px;
-    margin-right: -16px;
-    width: calc(100% + 32px);
+    margin-left: 0;
+    margin-right: 0;
+    width: 100%;
     border-radius: 0;
   }
-  .wp-page { padding-left: 16px; padding-right: 32px; }
-  .wp-meta-bar { flex-direction: column; align-items: flex-start; }
+
+  /* Paksa aspect ratio 16/9 murni, full width */
+  .wp-player-wrap :deep(.vp-wrap) {
+    aspect-ratio: 16 / 9;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .wp-meta-bar {
+    padding-left: 16px;
+    padding-right: 16px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wp-info {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .wp-genres {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* iPhone SE / small phones (≤375px) */
+@media (max-width: 375px) {
+  .wp-player-wrap :deep(.vp-wrap) {
+    aspect-ratio: 4 / 3;   /* sedikit lebih tall di layar sempit */
+  }
+}
+
+/* Landscape mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .wp-player-wrap :deep(.vp-wrap) {
+    aspect-ratio: unset;
+    height: 100svh;        /* full tinggi layar saat landscape */
+  }
+
+  .wp-page {
+    padding-top: 0;
+  }
+
+  .wp-breadcrumb {
+    display: none;         /* sembunyikan breadcrumb saat landscape */
+  }
 }
 </style>

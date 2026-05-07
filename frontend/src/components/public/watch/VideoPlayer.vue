@@ -1,19 +1,4 @@
 <script setup>
-/**
- * VideoPlayer — player wrapper yang menggabungkan Plyr (direct video)
- * atau iframe (embed), skip intro, resume prompt, dan subtitle tracks.
- *
- * Props:
- *   src          String  — URL stream saat ini
- *   subtitles    Array   — [{ lang, label, url }]
- *   hasEpisodes  Boolean — true jika series/anime (aktifkan skip intro)
- *   storageKey   String  — localStorage key untuk progress (null = disable)
- *
- * Emits:
- *   error        — saat video gagal load
- *   timeupdate   — setiap timeupdate dari Plyr (untuk logic di parent)
- *   ended        — saat video selesai
- */
 import { ref, computed, watch, nextTick, watchEffect, onBeforeUnmount } from 'vue'
 import { usePlayer }   from '@/composables/usePlayer'
 import { useSubtitle } from '@/composables/useSubtitle'
@@ -24,13 +9,15 @@ const props = defineProps({
   subtitles:   { type: Array,   default: () => [] },
   hasEpisodes: { type: Boolean, default: false },
   storageKey:  { type: String,  default: null },
+  poster:      { type: String,  default: '' },
 })
 
 const emit = defineEmits(['error', 'timeupdate', 'ended'])
 
 // ── Refs ───────────────────────────────────────────────────────
-const videoRef  = ref(null)
-const hasError  = ref(false)
+const videoRef     = ref(null)
+const hasError     = ref(false)
+const hasStarted   = ref(false)
 
 // ── Subtitle ───────────────────────────────────────────────────
 const {
@@ -53,7 +40,7 @@ const skipIntro = () => {
   showSkipIntro.value = false
 }
 
-// ── Player ─────────────────────────────────────────────────────
+// ── Progress ───────────────────────────────────────────────────
 const storageKeyRef = computed(() => props.storageKey)
 
 const {
@@ -64,8 +51,9 @@ const {
   resume,
   startOver,
   clearProgress,
-} = useProgress(storageKeyRef, ref(null)) // plyrInstance injected below
+} = useProgress(storageKeyRef, ref(null))
 
+// ── Player ─────────────────────────────────────────────────────
 const { plyrInstance, initPlyr, destroyPlyr } = usePlayer({
   subtitleSize,
   subtitleColor,
@@ -79,6 +67,7 @@ const { plyrInstance, initPlyr, destroyPlyr } = usePlayer({
   },
 
   onTimeUpdate: () => {
+    if (!hasStarted.value) hasStarted.value = true
     saveProgress()
     if (props.hasEpisodes) {
       const t = plyrInstance.value?.currentTime ?? 0
@@ -97,12 +86,9 @@ const { plyrInstance, initPlyr, destroyPlyr } = usePlayer({
     hasError.value = true
     emit('error')
   },
-})
 
-// Patch useProgress agar pakai plyrInstance yang baru dibuat
-// (workaround karena plyrInstance dibuat setelah useProgress dipanggil)
-const _origSave    = saveProgress
-const _origRestore = restoreProgress
+
+})
 
 // ── Computed ───────────────────────────────────────────────────
 const isDirectVideo = computed(() => {
@@ -120,10 +106,11 @@ watchEffect(async () => {
   initPlyr(videoRef.value)
 })
 
-// Reset state on server / episode change (when src changes)
+// Reset state on src change
 watch(() => props.src, () => {
-  hasError.value         = false
-  showSkipIntro.value    = false
+  hasError.value      = false
+  hasStarted.value    = false
+  showSkipIntro.value = false
 })
 
 onBeforeUnmount(() => {
@@ -131,7 +118,16 @@ onBeforeUnmount(() => {
   destroyPlyr()
 })
 
-// Expose untuk parent (misal scroll to player)
+const posterSrcset = computed(() => {
+  const url = props.poster
+  if (!url) return ''
+  // Replace w1280 → ukuran lain untuk srcset
+  const w300  = url.replace('/w1280/', '/w300/')
+  const w500  = url.replace('/w1280/', '/w500/')
+  const w780  = url.replace('/w1280/', '/w780/')
+  return `${w300} 300w, ${w500} 500w, ${w780} 780w, ${url} 1280w`
+})
+
 defineExpose({ plyrInstance })
 </script>
 
@@ -180,6 +176,30 @@ defineExpose({ plyrInstance })
       <p>URL stream belum tersedia</p>
     </div>
 
+    <!-- ── Poster Overlay ─────────────────────────────────── -->
+    <Transition name="vp-fade">
+      <div v-if="poster && !hasStarted" class="vp-poster">
+        <img
+          :src="poster"
+          :srcset="posterSrcset"
+          sizes="(max-width: 375px) 375px,
+                (max-width: 640px) 640px,
+                (max-width: 1024px) 780px,
+                1280px"
+          class="vp-poster__img"
+          fetchpriority="high"
+          alt=""
+          draggable="false"
+        />
+        <div class="vp-poster__gradient" />
+        <button class="vp-poster__play" aria-label="Putar film" @click="plyrInstance?.play()">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </button>
+      </div>
+    </Transition>
+
     <!-- ── Skip Intro ─────────────────────────────────────── -->
     <Transition name="vp-fade-slide">
       <button
@@ -194,18 +214,14 @@ defineExpose({ plyrInstance })
     <!-- ── Resume Prompt ──────────────────────────────────── -->
     <Transition name="vp-fade-slide">
       <div v-if="showResumePrompt" class="vp-resume-prompt">
-        <span class="vp-resume-text">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          Lanjut dari {{ resumeFormatted }}?
-        </span>
-        <button class="vp-resume-btn vp-resume-btn--primary" @click="resume">
-          Lanjutkan
-        </button>
-        <button class="vp-resume-btn" @click="startOver">
-          Dari Awal
-        </button>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" class="vp-resume-icon">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span class="vp-resume-text">Lanjut dari {{ resumeFormatted }}?</span>
+        <div class="vp-resume-actions">
+          <button class="vp-resume-btn vp-resume-btn--primary" @click="resume">Lanjutkan</button>
+          <button class="vp-resume-btn" @click="startOver">Dari Awal</button>
+        </div>
       </div>
     </Transition>
 
@@ -272,34 +288,47 @@ defineExpose({ plyrInstance })
 /* ── Resume Prompt ───────────────────────────────────────────── */
 .vp-resume-prompt {
   position: absolute;
-  bottom: 80px; left: 20px;
+  bottom: 56px;
+  left: 12px;
+  transform: none;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 8px;
+  padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
-  flex-wrap: wrap;
-  max-width: min(400px, calc(100% - 40px));
+  white-space: nowrap;
+  max-width: calc(100% - 24px);
 }
+
+.vp-resume-icon {
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
 .vp-resume-text {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #fff;
-  font-size: 13px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
   font-weight: 500;
+  flex-shrink: 0;
 }
+
+.vp-resume-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
 .vp-resume-btn {
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   background: transparent;
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
@@ -313,6 +342,23 @@ defineExpose({ plyrInstance })
 }
 .vp-resume-btn--primary:hover { background: #818cf8; }
 
+/* Mobile */
+@media (max-width: 640px) {
+  .vp-resume-prompt {
+    bottom: 18px;
+    left: 8px;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .vp-resume-text {
+    font-size: 11px;
+  }
+  .vp-resume-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+}
+
 /* ── Plyr overrides ──────────────────────────────────────────── */
 :deep(.plyr) {
   width: 100%; height: 100%;
@@ -325,10 +371,42 @@ defineExpose({ plyrInstance })
   --plyr-video-background: #000;
   --plyr-range-fill-background: #6366f1;
 }
+
 :deep(.plyr--video .plyr__controls) {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 12px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-  padding: 20px 14px 12px;
+  gap: 0;
 }
+
+:deep(.plyr__controls__row--top) {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+
+:deep(.plyr__controls__row--top .plyr__progress) {
+  flex: 1;
+}
+
+:deep(.plyr__controls__row--bottom) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+:deep(.plyr__controls__row--top .plyr__time--current) {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 :deep(.plyr__caption) {
   font-size: var(--subtitle-size) !important;
   color: var(--subtitle-color, #ffffff) !important;
@@ -341,73 +419,279 @@ defineExpose({ plyrInstance })
   transition: font-size 0.15s ease, color 0.15s ease;
 }
 
-/* ── Plyr settings menu overrides ────────────────────────────── */
-:deep(.plyr__menu__container) {
-  min-width: 200px;
-  background: #1a1a2e !important;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+:deep(.plyr__time-display) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
-:deep(.plyr__menu__container *) { color: #c7c8ff; }
 
-:deep(.plyr-subtitle-size-panel) {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 12px 14px 16px;
+:deep(.plyr__time-sep) {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
 }
-:deep(.plyr-sub-size-label) {
-  font-size: 11px; font-weight: 600;
+
+:deep(.plyr__time--duration) {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Custom Settings Menu ─────────────────────────────────────── */
+:deep(.plyr-custom-menu) {
+  position: absolute;
+  bottom: 60px;
+  right: 14px;
+  z-index: 20;
+  background: rgba(12, 12, 22, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  width: 280px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+:deep(.plyr-custom-menu__inner) {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Tabs ── */
+:deep(.plyr-tabs) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+:deep(.plyr-tab-btn) {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  background: transparent;
   color: #64748b;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 8px 14px 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  text-align: center;
 }
-:deep(.plyr-sub-size-row) {
-  display: flex; align-items: center;
-  justify-content: space-between; gap: 8px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 8px; padding: 6px 8px;
+
+:deep(.plyr-tab-btn:hover) {
+  color: #cbd5e1;
 }
-:deep(.plyr-sub-size-btn) {
-  background: rgba(99, 102, 241, 0.2);
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  border-radius: 6px; color: #a5b4fc;
-  font-size: 12px; font-weight: 700;
-  padding: 5px 14px; cursor: pointer;
-  font-family: inherit; transition: all 0.15s; flex-shrink: 0;
+
+:deep(.plyr-tab-btn--active) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
-:deep(.plyr-sub-size-btn:hover) {
-  background: rgba(99, 102, 241, 0.4);
-  border-color: rgba(99, 102, 241, 0.7); color: #fff;
+
+:deep(.plyr-tab-close) {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.07);
+  color: #64748b;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  font-family: inherit;
 }
-:deep(.plyr-sub-size-display) {
-  font-size: 15px; font-weight: 700; color: #fff;
-  min-width: 42px; text-align: center; letter-spacing: -0.01em;
+
+:deep(.plyr-tab-close:hover) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
-:deep(.plyr-sub-size-slider-wrap) {
-  display: flex; align-items: center;
-  gap: 8px; width: 100%; padding: 0 2px;
+
+/* ── Tab panels ── */
+:deep(.plyr-tab-panel) {
+  padding: 6px 0 8px;
 }
-:deep(.plyr-sub-size-min),
-:deep(.plyr-sub-size-max) {
-  font-size: 10px; color: #64748b; white-space: nowrap; flex-shrink: 0;
+
+/* ── Menu list (speed items) ── */
+:deep(.plyr-menu-list) {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
 }
-:deep(.plyr-sub-size-slider) {
-  flex: 1; accent-color: #6366f1; cursor: pointer; height: 4px; min-width: 0;
+
+:deep(.plyr-menu-item) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
 }
-:deep(.plyr-sub-color-row) {
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 14px 12px;
+
+:deep(.plyr-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
 }
+
+:deep(.plyr-menu-item--active) {
+  color: #fff;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+:deep(.plyr-menu-check) {
+  width: 14px;
+  height: 14px;
+  color: #6366f1;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+:deep(.plyr-menu-item--active .plyr-menu-check) {
+  opacity: 1;
+}
+
+/* ── Slider rows ── */
+:deep(.plyr-menu-slider-row) {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  margin: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.plyr-menu-slider-header) {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+:deep(.plyr-menu-slider-icon) {
+  color: #6366f1;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+:deep(.plyr-menu-slider-label) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  flex: 1;
+}
+
+:deep(.plyr-menu-slider-value) {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6366f1;
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+:deep(.plyr-menu-slider) {
+  width: 100%;
+  accent-color: #6366f1;
+  cursor: pointer;
+  height: 4px;
+  border-radius: 2px;
+}
+
+/* ── Color section ── */
+:deep(.plyr-menu-color-section) {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  margin: 4px 8px 8px;
+}
+
+:deep(.plyr-sub-color-grid) {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 7px;
+}
+
 :deep(.plyr-sub-color-btn) {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
   border: 2px solid transparent;
-  cursor: pointer; padding: 0; transition: all 0.15s; flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
 }
-:deep(.plyr-sub-color-btn:hover) { transform: scale(1.2); }
+
+:deep(.plyr-sub-color-btn:hover) {
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 :deep(.plyr-sub-color-btn--active) {
   border-color: #fff;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.6);
-  transform: scale(1.15);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.7);
+  transform: scale(1.05);
+}
+
+/* ── Play Button (poster overlay) ───────────────────────────── */
+.vp-poster__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+  pointer-events: all;   /* override pointer-events: none dari .vp-poster */
+  padding-left: 4px;     /* optik agar icon play tampak centered */
+}
+
+.vp-poster__play:hover {
+  background: rgba(99, 102, 241, 0.75);
+  border-color: #fff;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.vp-poster__play:active {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+/* Mobile — sedikit lebih kecil */
+@media (max-width: 640px) {
+  .vp-poster__play {
+    width: 54px;
+    height: 54px;
+  }
+  .vp-poster__play svg {
+    width: 22px;
+    height: 22px;
+  }
 }
 
 /* ── Transitions ─────────────────────────────────────────────── */
@@ -420,27 +704,127 @@ defineExpose({ plyrInstance })
   opacity: 0; transform: translateY(8px);
 }
 
+/* ── Poster Overlay ──────────────────────────────────────────── */
+.vp-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background-size: cover;
+  background-position: center top;
+  pointer-events: none;   /* biar controls tetap bisa diklik */
+}
+
+.vp-poster__gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.15) 0%,
+    rgba(0,0,0,0.05) 30%,
+    rgba(0,0,0,0.55) 70%,
+    rgba(0,0,0,0.88) 100%
+  );
+}
+
+.vp-poster__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+/* ── Fade transition ─────────────────────────────────────────── */
+.vp-fade-enter-active,
+.vp-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.vp-fade-enter-from,
+.vp-fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vp-resume-prompt {
-    bottom: 56px;
-    left: 10px;
-    right: 10px;
-    max-width: unset;
-    padding: 8px 12px;
-    gap: 8px;
-    border-radius: 6px;
+  /* Settings panel — compact, tidak menutupi player */
+  :deep(.plyr-custom-menu) {
+    position: absolute;
+    width: 220px;          /* lebar fixed, tidak full width */
+    right: 8px;
+    left: auto;            /* reset left */
+    bottom: 52px;          /* tepat di atas control bar */
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 10, 20, 0.99);
     backdrop-filter: none;
-    background: rgba(0, 0, 0, 0.88);
+    max-height: 200px;     /* batasi tinggi agar muat di player */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .vp-resume-text {
-    font-size: 12px;
-    flex: 1;
-    min-width: 0;
+
+  /* Tabs lebih compact */
+  :deep(.plyr-tabs) {
+    padding: 8px 8px 6px;
+    gap: 3px;
   }
-  .vp-resume-btn {
-    padding: 4px 10px;
+
+  :deep(.plyr-tab-btn) {
+    padding: 4px 6px;
     font-size: 11px;
+  }
+
+  :deep(.plyr-tab-close) {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+
+  /* Slider rows lebih compact */
+  :deep(.plyr-menu-slider-row) {
+    margin: 3px 6px;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  :deep(.plyr-menu-slider-label) {
+    font-size: 11px;
+  }
+
+  :deep(.plyr-menu-slider-value) {
+    font-size: 11px;
+    min-width: 28px;
+  }
+
+  :deep(.plyr-menu-slider-icon svg) {
+    width: 11px;
+    height: 11px;
+  }
+
+  /* Color section compact */
+  :deep(.plyr-menu-color-section) {
+    margin: 3px 6px 6px;
+    padding: 6px 8px;
+  }
+
+  :deep(.plyr-sub-color-grid) {
+    grid-template-columns: repeat(6, 1fr);  /* tetap 6 kolom tapi lebih kecil */
+    gap: 5px;
+  }
+
+  /* Speed items */
+  :deep(.plyr-menu-item) {
+    padding: 8px 8px;
+    font-size: 12px;
+  }
+
+  :deep(.plyr-menu-list) {
+    padding: 0 4px;
   }
 }
 
