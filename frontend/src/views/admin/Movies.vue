@@ -2,9 +2,9 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '@/lib/api'
 import { Plus, Search, Clapperboard, Film, Tv, Sparkles } from 'lucide-vue-next'
-import MovieTable    from '@/components/admin/MovieTable.vue'
+import MovieTable     from '@/components/admin/MovieTable.vue'
 import MovieFormModal from '@/components/admin/MovieFormModal.vue'
-import SeasonModal   from '@/components/admin/SeasonModal.vue'
+import SeasonModal    from '@/components/admin/SeasonModal.vue'
 import SubtitleModal  from '@/components/admin/SubtitleModal.vue'
 
 // ── State ────────────────────────────────────────────────────
@@ -83,11 +83,31 @@ const handleFormSubmit = async (formData) => {
   loading.value = true
   try {
     const endpoint = getEndpoint(formData.type)
+
     if (isEdit.value) {
-      await api.put(`${endpoint}/${currentId.value}`, formData)
+      // Build payload — kirim semua field yang relevan
+      const payload = {
+        has_episodes:      formData.has_episodes,
+        url1:              formData.url1 || undefined,
+        url2:              formData.url2 || undefined,
+        url3:              formData.url3 || undefined,
+        // metadata fields
+        title:             formData.title    || undefined,
+        overview:          formData.overview || undefined,
+        poster:            formData.poster   || undefined,
+        backdrop:          formData.backdrop || undefined,
+        genre:             formData.genre    || undefined,
+        year:              formData.year     || undefined,
+        duration:          formData.duration || undefined,
+        rating:            formData.rating   || undefined,
+        // refresh flag
+        refresh_from_tmdb: formData.refresh_from_tmdb || false,
+      }
+      await api.put(`${endpoint}/${currentId.value}`, payload)
     } else {
       await api.post(endpoint, formData)
     }
+
     showFormModal.value = false
     await fetchAll()
   } catch (err) {
@@ -98,12 +118,24 @@ const handleFormSubmit = async (formData) => {
 }
 
 const handleEdit = (item) => {
-  isEdit.value = true
+  isEdit.value    = true
   currentId.value = item.id
+  // Kirim semua data item ke form, termasuk metadata yang bisa diedit
   formModalRef.value?.setForm({
-    tmdb_id: item.tmdb_id, type: item.type,
+    tmdb_id:      item.tmdb_id,
+    type:         item.type,
     has_episodes: item.has_episodes || false,
-    url1: item.url1, url2: item.url2, url3: item.url3,
+    url1:         item.url1    || '',
+    url2:         item.url2    || '',
+    url3:         item.url3    || '',
+    title:        item.title   || '',
+    overview:     item.overview || '',
+    poster:       item.poster  || '',
+    backdrop:     item.backdrop || '',
+    genre:        item.genre   || '',
+    year:         item.year    || '',
+    duration:     item.duration || '',
+    rating:       item.rating  || '',
   })
   showFormModal.value = true
 }
@@ -117,7 +149,7 @@ const handleDelete = async (item) => {
 }
 
 const openAddModal = () => {
-  isEdit.value = false
+  isEdit.value    = false
   currentId.value = null
   formModalRef.value?.reset()
   showFormModal.value = true
@@ -125,7 +157,6 @@ const openAddModal = () => {
 
 const handleOpenSubtitle = (item) => {
   showSubtitleModal.value = true
-  // nextTick agar modal sudah mounted sebelum open dipanggil
   import('vue').then(({ nextTick }) => {
     nextTick(() => subtitleModalRef.value?.open(item.id, item.title))
   })
@@ -203,7 +234,7 @@ onMounted(fetchAll)
             :style="activeTab === tab.id ? `--tab-color: ${tab.color}` : ''"
             @click="activeTab = tab.id; searchQuery = ''"
           >
-            <Film     v-if="tab.id === 'movie'"  :size="13" />
+            <Film     v-if="tab.id === 'movie'"   :size="13" />
             <Tv       v-else-if="tab.id === 'series'" :size="13" />
             <Sparkles v-else :size="13" />
             {{ tab.label }}
@@ -296,8 +327,8 @@ onMounted(fetchAll)
   color: var(--tab-color);
 }
 .mv-toolbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-.mv-search-wrap { position: relative; width: 220px; }
-.mv-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted2); pointer-events: none; }
-.mv-search-input { padding-left: 34px !important; }
-.mv-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.mv-search-wrap   { position: relative; width: 220px; }
+.mv-search-icon   { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted2); pointer-events: none; }
+.mv-search-input  { padding-left: 34px !important; }
+.mv-count         { font-size: 12px; color: var(--muted); white-space: nowrap; }
 </style>

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api'
 import { Loader2, Eye, EyeOff } from 'lucide-vue-next'
+import { confirmSessionCache } from '@/router'
 
 const router = useRouter()
 
@@ -18,6 +19,7 @@ const login = async () => {
 
   try {
     await api.post('/auth/login', { key: key.value })
+    confirmSessionCache()
     router.push('/admin')
   } catch (err) {
     error.value = err.response?.data?.error || 'Terjadi kesalahan, coba lagi'

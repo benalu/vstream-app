@@ -12,7 +12,8 @@ const HeroSlides   = () => import('@/views/admin/HeroSlides.vue')
 const NotFound     = () => import('@/views/NotFound.vue')
 
 let sessionCache = null
-export const clearSessionCache = () => { sessionCache = null }
+export const clearSessionCache  = () => { sessionCache = null  }
+export const confirmSessionCache = () => { sessionCache = true  }  // ← tambahan
 
 const routes = [
   {

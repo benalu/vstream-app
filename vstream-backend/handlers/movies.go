@@ -81,7 +81,6 @@ func addContent(c *gin.Context, contentType string) {
 	}
 
 	// URL1 wajib kalau tidak punya episode
-	// (series/anime dengan episode: URL diisi di level episode, bukan konten)
 	if !hasEpisodes && input.URL1 == "" {
 		verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "URL Server 1 wajib diisi", nil))
 		return
@@ -108,15 +107,31 @@ func getAllContent(c *gin.Context, contentType string) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
 
-// updateContent update URL (dan has_episodes untuk anime)
+// updateContent update URL, metadata, dan has_episodes
 func updateContent(c *gin.Context, contentType string) {
 	id := c.Param("id")
 
 	var input struct {
-		HasEpisodes *bool  `json:"has_episodes"` // pointer: nil = tidak dikirim
-		URL1        string `json:"url1"`
-		URL2        string `json:"url2"`
-		URL3        string `json:"url3"`
+		// Metadata fields — semua optional, hanya diupdate kalau dikirim
+		Title    *string `json:"title"`
+		Overview *string `json:"overview"`
+		Poster   *string `json:"poster"`
+		Backdrop *string `json:"backdrop"`
+		Genre    *string `json:"genre"`
+		Year     *string `json:"year"`
+		Duration *string `json:"duration"`
+		Rating   *string `json:"rating"`
+
+		// Episode flag (anime only)
+		HasEpisodes *bool `json:"has_episodes"`
+
+		// URL fields
+		URL1 *string `json:"url1"`
+		URL2 *string `json:"url2"`
+		URL3 *string `json:"url3"`
+
+		// Refresh metadata dari TMDB
+		RefreshFromTMDB bool `json:"refresh_from_tmdb"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -130,25 +145,94 @@ func updateContent(c *gin.Context, contentType string) {
 		return
 	}
 
-	// Untuk anime: boleh ubah has_episodes
+	// ── Refresh dari TMDB (re-fetch semua metadata) ───────────
+	if input.RefreshFromTMDB {
+		meta, err := services.FetchMetadata(item.TmdbID, item.Type)
+		if err != nil {
+			verr.Handle(c, verr.NewAdminError(http.StatusBadGateway, "Gagal mengambil data dari TMDB", err))
+			return
+		}
+
+		var genres []string
+		for _, g := range meta.Genres {
+			genres = append(genres, g.Name)
+		}
+
+		logos, _ := services.FetchLogos(item.TmdbID, item.Type)
+		logosJSON := "[]"
+		if len(logos) > 0 {
+			if b, err := json.Marshal(logos); err == nil {
+				logosJSON = string(b)
+			}
+		}
+
+		item.Title = meta.NormalizedTitle()
+		item.Year = strings.Split(meta.NormalizedReleaseDate(), "-")[0]
+		item.Duration = fmt.Sprintf("%d min", meta.NormalizedRuntime())
+		item.Rating = fmt.Sprintf("%.1f", meta.VoteAverage)
+		item.Genre = strings.Join(genres, ", ")
+		item.Poster = "https://image.tmdb.org/t/p/w500" + meta.PosterPath
+		item.Backdrop = "https://image.tmdb.org/t/p/w1280" + meta.BackdropPath
+		item.Logos = logosJSON
+		item.Overview = meta.Overview
+	}
+
+	// ── Update metadata manual (tiap field hanya kalau dikirim) ──
+	if !input.RefreshFromTMDB {
+		if input.Title != nil {
+			item.Title = strings.TrimSpace(*input.Title)
+		}
+		if input.Overview != nil {
+			item.Overview = strings.TrimSpace(*input.Overview)
+		}
+		if input.Poster != nil {
+			item.Poster = strings.TrimSpace(*input.Poster)
+		}
+		if input.Backdrop != nil {
+			item.Backdrop = strings.TrimSpace(*input.Backdrop)
+		}
+		if input.Genre != nil {
+			item.Genre = strings.TrimSpace(*input.Genre)
+		}
+		if input.Year != nil {
+			item.Year = strings.TrimSpace(*input.Year)
+		}
+		if input.Duration != nil {
+			item.Duration = strings.TrimSpace(*input.Duration)
+		}
+		if input.Rating != nil {
+			item.Rating = strings.TrimSpace(*input.Rating)
+		}
+	}
+
+	// ── has_episodes (anime only) ─────────────────────────────
 	if contentType == "anime" && input.HasEpisodes != nil {
 		item.HasEpisodes = *input.HasEpisodes
 	}
 
-	// URL hanya diupdate kalau tidak punya episode
+	// ── URL (hanya kalau tidak punya episode) ─────────────────
 	willHaveEpisodes := item.HasEpisodes
 	if contentType == "anime" && input.HasEpisodes != nil {
 		willHaveEpisodes = *input.HasEpisodes
 	}
 
 	if !willHaveEpisodes {
-		if input.URL1 == "" {
+		// Validasi url1 wajib — dari input baru atau sudah ada di DB
+		newURL1 := item.URL1
+		if input.URL1 != nil {
+			newURL1 = strings.TrimSpace(*input.URL1)
+		}
+		if newURL1 == "" {
 			verr.Handle(c, verr.NewAdminError(http.StatusBadRequest, "URL Server 1 wajib diisi", nil))
 			return
 		}
-		item.URL1 = input.URL1
-		item.URL2 = input.URL2
-		item.URL3 = input.URL3
+		item.URL1 = newURL1
+		if input.URL2 != nil {
+			item.URL2 = strings.TrimSpace(*input.URL2)
+		}
+		if input.URL3 != nil {
+			item.URL3 = strings.TrimSpace(*input.URL3)
+		}
 	}
 
 	if err := database.DB.Save(&item).Error; err != nil {
